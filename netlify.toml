@@ -1,0 +1,22 @@
+# 弓道帳 — Netlify 設定
+# ビルド不要の静的サイトとして、リポジトリのルートをそのまま公開する。
+
+[build]
+  publish = "."
+  command = ""
+
+# JS / CSS は内容が変わることがあるため、長くキャッシュしない（最小限）
+[[headers]]
+  for = "/*.js"
+  [headers.values]
+    Cache-Control = "public, max-age=3600"
+
+[[headers]]
+  for = "/*.css"
+  [headers.values]
+    Cache-Control = "public, max-age=3600"
+
+[[headers]]
+  for = "/*.html"
+  [headers.values]
+    Cache-Control = "public, max-age=0, must-revalidate"

@@ -1,0 +1,53 @@
+rules_version = '2';
+
+// 弓道帳 — Firestore セキュリティルール
+//
+// 方針：
+// - 未ログインはすべて不可。
+// - users は本人のみ書き込み可。読み取りは本人＋同じチームのメンバーまで
+//   （リーダーがメンバー一覧と名前・学年を見るため）。
+// - teams はログイン済みなら読み取り可（招待コードでチームを探すために必要。
+//   招待コード自体が参加の鍵になる）。作成は作成者＝リーダーのときのみ、
+//   更新・削除はリーダーのみ。
+// - practices は本人のみ書き込み可。読み取りは同じチームの所属メンバーまで許可する。
+//   これは「リーダーがメンバーの詳細（1立ごとの記録・メモ・矢所）を見る」ことと、
+//   「一般メンバーがチーム合計を計算する」ことの両立のため。
+//   一般メンバーに他人の詳細を見せない出し分けは、アプリ画面側でも行っている
+//   （一般メンバーの画面には合計だけを出し、詳細は描画しない）。
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    // 自分の users ドキュメントにある所属チームID
+    function myTeamId() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.teamId;
+    }
+
+    match /users/{uid} {
+      allow read: if signedIn()
+        && (request.auth.uid == uid
+            || (resource.data.teamId != null && resource.data.teamId == myTeamId()));
+      allow create, update: if signedIn() && request.auth.uid == uid;
+      allow delete: if false;
+    }
+
+    match /teams/{teamId} {
+      allow read: if signedIn();
+      allow create: if signedIn() && request.resource.data.leaderUid == request.auth.uid;
+      allow update, delete: if signedIn() && resource.data.leaderUid == request.auth.uid;
+    }
+
+    match /practices/{practiceId} {
+      allow read: if signedIn()
+        && (resource.data.uid == request.auth.uid
+            || resource.data.teamId == myTeamId());
+      allow create: if signedIn()
+        && request.resource.data.uid == request.auth.uid;
+      allow update, delete: if signedIn()
+        && resource.data.uid == request.auth.uid;
+    }
+  }
+}

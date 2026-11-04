@@ -1,0 +1,1 @@
+{"background_color":"#faf6ec","description":"弓道の的中記録アプリ","display":"standalone","icons":[{"purpose":"any","sizes":"192x192","src":"icon.svg","type":"image/svg+xml"},{"purpose":"any","sizes":"512x512","src":"icon.svg","type":"image/svg+xml"}],"lang":"ja","name":"弓道帳","scope":"./","short_name":"弓道帳","start_url":"./index.html","theme_color":"#faf6ec"}

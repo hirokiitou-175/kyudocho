@@ -1,0 +1,265 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>弓道帳</title>
+<meta name="description" content="弓道の的中記録アプリ「弓道帳」。立と射込みの記録、チーム集計、リーダーの確認用画面。">
+<meta name="theme-color" content="#faf6ec">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icon.svg">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<!-- 起動中 -->
+<section id="view-loading" class="view">
+  <div class="center-box">
+    <div class="target-mark" aria-hidden="true"></div>
+    <p class="app-title">弓道帳</p>
+    <p class="muted">読み込み中…</p>
+  </div>
+</section>
+
+<!-- ログイン -->
+<section id="view-login" class="view" hidden>
+  <div class="center-box">
+    <div class="target-mark" aria-hidden="true"></div>
+    <h1 class="app-title">弓道帳</h1>
+    <p class="muted">メールアドレスにログイン用リンクを送ります。<br>パスワードは要りません。</p>
+    <form id="login-form" class="stack">
+      <label class="field">
+        <span>メールアドレス</span>
+        <input type="email" id="login-email" inputmode="email" autocomplete="email" required placeholder="example@mail.com">
+      </label>
+      <button type="submit" class="btn btn-primary btn-big" id="login-send">リンクを送る</button>
+    </form>
+    <p id="login-message" class="message" role="status"></p>
+    <p class="note">届いたメール内のリンクを、この端末のブラウザで開いてください。</p>
+  </div>
+</section>
+
+<!-- プロフィール登録（初回） -->
+<section id="view-profile" class="view" hidden>
+  <div class="center-box">
+    <h1 class="app-title">プロフィール登録</h1>
+    <p class="muted">チームで表示する名前を登録してください。</p>
+    <form id="profile-form" class="stack">
+      <label class="field">
+        <span>名前（必須）</span>
+        <input type="text" id="profile-name" autocomplete="name" required maxlength="30" placeholder="名前">
+      </label>
+      <label class="field">
+        <span>学年（任意）</span>
+        <input type="text" id="profile-grade" maxlength="10" placeholder="例：2年">
+      </label>
+      <button type="submit" class="btn btn-primary btn-big">登録する</button>
+    </form>
+    <p id="profile-message" class="message" role="status"></p>
+  </div>
+</section>
+
+<!-- チーム未所属 -->
+<section id="view-team-setup" class="view" hidden>
+  <div class="center-box wide">
+    <h1 class="app-title">チームの用意</h1>
+    <p class="muted"><span id="setup-hello"></span>さん、チームを作るか、招待コードで参加してください。</p>
+
+    <div class="card">
+      <h2>チームを作る</h2>
+      <p class="note">作った人がリーダーになります。あとで出てくる招待コードをメンバーに伝えてください。</p>
+      <form id="team-create-form" class="stack">
+        <label class="field">
+          <span>チーム名</span>
+          <input type="text" id="team-name" required maxlength="40" placeholder="例：○○高校 弓道部">
+        </label>
+        <button type="submit" class="btn btn-primary btn-big">チームを作る</button>
+      </form>
+    </div>
+
+    <div class="card">
+      <h2>招待コードで参加する</h2>
+      <form id="team-join-form" class="stack">
+        <label class="field">
+          <span>招待コード</span>
+          <input type="text" id="team-invite-code" required maxlength="12" autocomplete="off" placeholder="例：A2B4C6">
+        </label>
+        <button type="submit" class="btn btn-big">参加する</button>
+      </form>
+    </div>
+
+    <p id="setup-message" class="message" role="status"></p>
+    <button type="button" class="btn btn-quiet" id="setup-logout">ログアウト</button>
+  </div>
+</section>
+
+<!-- メイン（ホーム／記録／チーム） -->
+<section id="view-main" class="view" hidden>
+  <header class="app-header">
+    <div class="target-mark small" aria-hidden="true"></div>
+    <div class="header-text">
+      <p class="header-title">弓道帳</p>
+      <p class="header-sub" id="header-sub"></p>
+    </div>
+    <button type="button" class="btn btn-quiet" id="btn-logout">ログアウト</button>
+  </header>
+
+  <main class="tab-pages">
+    <!-- ホーム -->
+    <div id="tab-home" class="tab-page">
+      <div class="card rate-card">
+        <div class="rate-head">
+          <h2 id="home-range-title">通算</h2>
+          <div class="range-switch" role="group" aria-label="期間の切り替え">
+            <button type="button" data-range="today">今日</button>
+            <button type="button" data-range="month">今月</button>
+            <button type="button" data-range="total" class="active">通算</button>
+          </div>
+        </div>
+        <div class="rate-body">
+          <div id="home-rate-graph" class="rate-graph" aria-label="的中率グラフ"></div>
+          <div class="rate-numbers">
+            <p><span class="num" id="home-shots">0</span> 射</p>
+            <p><span class="num" id="home-hits">0</span> 中</p>
+            <p class="rate-pct" id="home-rate">―</p>
+          </div>
+        </div>
+        <div class="breakdown">
+          <div>
+            <h3>立</h3>
+            <p id="home-tachi">0射 0中（―）</p>
+          </div>
+          <div>
+            <h3>射込み</h3>
+            <p id="home-shakomi">0射 0中（―）</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>最近の記録</h2>
+        <div id="home-recent"></div>
+      </div>
+    </div>
+
+    <!-- 記録 -->
+    <div id="tab-record" class="tab-page" hidden>
+      <div class="card">
+        <div class="record-head">
+          <label class="field inline">
+            <span>日付</span>
+            <input type="date" id="record-date">
+          </label>
+          <button type="button" class="btn btn-quiet" id="btn-new-record">新しい記録</button>
+        </div>
+
+        <div class="mode-switch" role="group" aria-label="立と射込みの切り替え">
+          <button type="button" id="mode-tachi" class="active">立（4射）</button>
+          <button type="button" id="mode-shakomi">射込み（2本）</button>
+        </div>
+
+        <div id="record-groups" class="groups"></div>
+        <p id="record-status" class="note"></p>
+
+        <div class="shot-buttons">
+          <button type="button" class="btn btn-hit" id="btn-hit">○ 的中</button>
+          <button type="button" class="btn btn-miss" id="btn-miss">× 外れ</button>
+        </div>
+        <div class="shot-sub-buttons">
+          <button type="button" class="btn" id="btn-undo">1射戻す</button>
+          <button type="button" class="btn" id="btn-yasho-edit">矢所の入力・修正</button>
+        </div>
+
+        <label class="field">
+          <span>メモ</span>
+          <textarea id="record-memo" rows="3" maxlength="500" placeholder="その日のメモ"></textarea>
+        </label>
+
+        <button type="button" class="btn btn-primary btn-big" id="btn-save">保存する</button>
+        <button type="button" class="btn btn-danger" id="btn-delete" hidden>この記録を削除する</button>
+        <p id="record-message" class="message" role="status"></p>
+      </div>
+    </div>
+
+    <!-- チーム -->
+    <div id="tab-team" class="tab-page" hidden>
+      <div class="card">
+        <h2 id="team-title">チーム</h2>
+        <p class="note" id="team-info"></p>
+        <p class="note">招待コード：<strong id="team-code"></strong>（メンバーに伝えてください）</p>
+      </div>
+
+      <div class="card" id="team-summary-card">
+        <h2>チーム合計</h2>
+        <div class="range-switch" role="group" aria-label="集計期間の切り替え">
+          <button type="button" data-trange="month" class="active">今月</button>
+          <button type="button" data-trange="total">通算</button>
+        </div>
+        <p id="team-total" class="team-total">―</p>
+        <div id="team-members"></div>
+        <p class="note" id="team-member-note" hidden>メンバー同士の詳しい記録は、リーダーだけが見られます。</p>
+      </div>
+
+      <div class="card" id="member-detail-card" hidden>
+        <button type="button" class="btn btn-quiet" id="btn-detail-back">← メンバー一覧に戻る</button>
+        <h2 id="detail-name">メンバー詳細</h2>
+        <p id="detail-summary" class="team-total">―</p>
+        <h3>矢所（的中した矢の位置）</h3>
+        <div id="detail-yasho" class="yasho-view"></div>
+        <h3>記録</h3>
+        <div id="detail-list"></div>
+      </div>
+
+      <div class="card">
+        <h2>CSV出力</h2>
+        <p class="note" id="csv-note">期間を選んでダウンロードできます。</p>
+        <div class="csv-row">
+          <label class="field inline">
+            <span>期間</span>
+            <select id="csv-range">
+              <option value="month">今月</option>
+              <option value="lastMonth">先月</option>
+              <option value="total">全期間</option>
+            </select>
+          </label>
+          <button type="button" class="btn btn-primary" id="btn-csv">CSVを出す</button>
+        </div>
+        <p id="csv-message" class="message" role="status"></p>
+      </div>
+    </div>
+  </main>
+
+  <nav class="tab-bar" aria-label="画面の切り替え">
+    <button type="button" data-tab="home" class="active">ホーム</button>
+    <button type="button" data-tab="record">記録</button>
+    <button type="button" data-tab="team">チーム</button>
+  </nav>
+</section>
+
+<!-- 矢所入力パネル -->
+<div id="yasho-panel" class="overlay" hidden>
+  <div class="sheet">
+    <h2>矢所（任意）</h2>
+    <p class="note" id="yasho-target-label">的中した位置をタップしてください。入力しなくても大丈夫です。</p>
+    <div id="yasho-pad" class="yasho-pad" role="button" aria-label="的。タップで矢所を記録"></div>
+    <div class="shot-sub-buttons">
+      <button type="button" class="btn" id="btn-yasho-clear">矢所を消す</button>
+      <button type="button" class="btn" id="btn-yasho-skip">スキップ</button>
+      <button type="button" class="btn btn-primary" id="btn-yasho-done">閉じる</button>
+    </div>
+  </div>
+</div>
+
+<!-- 保存時のまとめ -->
+<div id="summary-panel" class="overlay" hidden>
+  <div class="sheet">
+    <h2>保存しました</h2>
+    <div id="summary-body"></div>
+    <button type="button" class="btn btn-primary btn-big" id="btn-summary-close">閉じる</button>
+  </div>
+</div>
+
+<script type="module" src="app.js"></script>
+</body>
+</html>
