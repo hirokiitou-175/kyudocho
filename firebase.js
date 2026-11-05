@@ -31,7 +31,7 @@ import {
   getDocs,
   serverTimestamp
 } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js";
-import { firebaseConfig } from "./firebase-config.js?v=20251105-10";
+import { firebaseConfig } from "./firebase-config.js?v=20251105-11";
 
 const app = initializeApp(firebaseConfig);
 export const auth = getAuth(app);

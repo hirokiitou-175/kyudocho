@@ -27,7 +27,7 @@ import {
   savePractice,
   removePractice,
   deletePractices
-} from "./firebase.js?v=20251105-10";
+} from "./firebase.js?v=20251105-11";
 
 // ---------------- 状態 ----------------
 const state = {
@@ -324,6 +324,17 @@ async function boot() {
 }
 
 // ---------------- ログイン・新規登録 ----------------
+// ログインIDのルール：6文字以上。使える文字は自由だが、保存の仕組み上
+// どうしても使えない形（/ を含む、. や .. のみ、__ で囲まれた形）だけ除く。
+// 大文字・小文字は区別する（登録したとおりに入力してもらう）。
+function loginIdError(id) {
+  if ([...id].length < 6) return "ログインIDは6文字以上で入力してください。";
+  if (id.includes("/") || id === "." || id === ".." || /^__.*__$/.test(id)) {
+    return "そのログインIDは使えません。別のIDにしてください。";
+  }
+  return "";
+}
+
 // 登録の進み具合（招待コードで参加／チームを作る）
 const regState = { mode: null, code: "" };
 
@@ -365,7 +376,7 @@ $("login-tab-create").addEventListener("click", () => setLoginTab("create"));
 
 $("login-id-form").addEventListener("submit", async (ev) => {
   ev.preventDefault();
-  const loginId = $("login-id").value.trim().toLowerCase();
+  const loginId = $("login-id").value.trim();
   const password = $("login-password").value;
   const msg = $("login-message");
   $("login-id-send").disabled = true;
@@ -391,7 +402,7 @@ $("btn-forgot").addEventListener("click", () => {
 $("btn-forgot-back").addEventListener("click", () => setLoginTab("login"));
 $("reset-form").addEventListener("submit", async (ev) => {
   ev.preventDefault();
-  const loginId = $("reset-id").value.trim().toLowerCase();
+  const loginId = $("reset-id").value.trim();
   const msg = $("login-message");
   try {
     const email = await findEmailByLoginId(loginId);
@@ -431,7 +442,7 @@ $("reg-form").addEventListener("submit", async (ev) => {
   const msg = $("login-message");
   msg.classList.remove("ok");
   const email = $("reg-email").value.trim();
-  const loginId = $("reg-id").value.trim().toLowerCase();
+  const loginId = $("reg-id").value.trim();
   const name = $("reg-name").value.trim();
   const grade = $("reg-grade").value.trim();
   const password = $("reg-password").value;
@@ -439,8 +450,9 @@ $("reg-form").addEventListener("submit", async (ev) => {
   const isCreate = regState.mode === "create";
   const teamName = isCreate ? $("reg-team-name").value.trim() : "";
 
-  if (!/^[a-z0-9_]{3,20}$/.test(loginId)) {
-    msg.textContent = "ログインIDは、英小文字・数字・_ の3〜20文字で入力してください。";
+  const idErr = loginIdError(loginId);
+  if (idErr) {
+    msg.textContent = idErr;
     return;
   }
   if (!name) {
@@ -554,14 +566,15 @@ $("setup-form").addEventListener("submit", async (ev) => {
   const msg = $("setup-message");
   const name = $("setup-name").value.trim();
   const grade = $("setup-grade").value.trim();
-  const loginId = $("setup-id").value.trim().toLowerCase();
+  const loginId = $("setup-id").value.trim();
   const password = $("setup-password").value;
   const currentId = state.profile?.loginId || null;
   const pwAlreadySet = hasPasswordProvider(state.user);
 
   if (!name) { msg.textContent = "名前を入力してください。"; return; }
-  if (!/^[a-z0-9_]{3,20}$/.test(loginId)) {
-    msg.textContent = "ログインIDは、英小文字・数字・_ の3〜20文字で入力してください。";
+  const idErr = loginIdError(loginId);
+  if (idErr) {
+    msg.textContent = idErr;
     return;
   }
   if (!pwAlreadySet && password.length < 6) {
