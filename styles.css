@@ -61,13 +61,14 @@ h3 { font-size: 1rem; margin: 1rem 0 0.4rem; }
 .message { min-height: 1.4em; color: var(--accent); font-size: 0.9rem; }
 .message.ok { color: #3c6e47; }
 
-/* 的モチーフ（同心円） */
+/* 的モチーフ：霞的（直径36cm）の区分どおりの配分。
+   中心から 中白20%／1の黒40%まで／2の白56.7%まで／2の黒65%まで／3の白81.7%まで／外黒100% */
 .target-mark {
   width: 84px; height: 84px;
   margin: 0 auto;
   border-radius: 50%;
   background:
-    radial-gradient(circle, var(--accent) 0 12%, #fffdf7 12% 30%, var(--ink) 30% 48%, #fffdf7 48% 68%, var(--ink) 68% 84%, #fffdf7 84% 100%);
+    radial-gradient(circle, #fffdf7 0 20%, var(--ink) 20% 40%, #fffdf7 40% 56.7%, var(--ink) 56.7% 65%, #fffdf7 65% 81.7%, var(--ink) 81.7% 100%);
   border: 2px solid var(--ink);
 }
 .target-mark.small { width: 34px; height: 34px; margin: 0; border-width: 1px; flex: none; }

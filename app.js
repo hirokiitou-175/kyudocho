@@ -27,7 +27,7 @@ import {
   savePractice,
   removePractice,
   deletePractices
-} from "./firebase.js?v=20251105-14";
+} from "./firebase.js?v=20251105-15";
 
 // ---------------- 状態 ----------------
 const state = {
@@ -184,7 +184,8 @@ function marksHtml(marks) {
 }
 
 // ---------------- 的グラフ（SVG） ----------------
-// 的モチーフの同心円＋朱色の弧で的中率を表す
+// 霞的（直径36cmの区分どおりの同心円）の上に、朱色の弧で的中率を重ねて表す。
+// 半径18cmを60pxに換算：中白12／1の黒24まで／2の白34まで／2の黒39まで／3の白49まで／外黒60。
 function targetGraphSvg(shots, hits) {
   const rate = shots ? hits / shots : 0;
   const C = 2 * Math.PI * 52;
@@ -192,13 +193,16 @@ function targetGraphSvg(shots, hits) {
   const center = shots ? Math.round(rate * 100) + "%" : "―";
   return `
   <svg viewBox="0 0 128 128" role="img" aria-label="的中率 ${center}">
-    <circle cx="64" cy="64" r="60" fill="#fffdf7" stroke="#2b2b28" stroke-width="2"/>
-    <circle cx="64" cy="64" r="46" fill="none" stroke="#2b2b28" stroke-width="7"/>
-    <circle cx="64" cy="64" r="32" fill="#fffdf7" stroke="#2b2b28" stroke-width="1.5"/>
+    <circle cx="64" cy="64" r="60" fill="#2b2b28"/>
+    <circle cx="64" cy="64" r="49" fill="#fffdf7"/>
+    <circle cx="64" cy="64" r="39" fill="#2b2b28"/>
+    <circle cx="64" cy="64" r="34" fill="#fffdf7"/>
+    <circle cx="64" cy="64" r="24" fill="#2b2b28"/>
+    <circle cx="64" cy="64" r="12" fill="#fffdf7"/>
     <circle cx="64" cy="64" r="52" fill="none" stroke="#c73e2c" stroke-width="5"
       stroke-dasharray="${arc} ${C.toFixed(1)}" transform="rotate(-90 64 64)" stroke-linecap="round"/>
-    <circle cx="64" cy="64" r="7" fill="#c73e2c"/>
-    <text x="64" y="97" text-anchor="middle" font-size="17" font-weight="700" fill="#2b2b28">${center}</text>
+    <rect x="41" y="85" width="46" height="22" rx="6" fill="#faf6ec" stroke="#2b2b28" stroke-width="1"/>
+    <text x="64" y="101" text-anchor="middle" font-size="15" font-weight="700" fill="#2b2b28">${center}</text>
   </svg>`;
 }
 
