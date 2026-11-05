@@ -205,7 +205,7 @@
         <button type="button" class="btn btn-quiet" id="btn-detail-back">← メンバー一覧に戻る</button>
         <h2 id="detail-name">メンバー詳細</h2>
         <p id="detail-summary" class="team-total">―</p>
-        <h3>矢所（的中した矢の位置）</h3>
+        <h3>矢所</h3>
         <div id="detail-yasho" class="yasho-view"></div>
         <h3>記録</h3>
         <div id="detail-list"></div>
@@ -241,11 +241,12 @@
 <div id="yasho-panel" class="overlay" hidden>
   <div class="sheet">
     <h2>矢所（任意）</h2>
-    <p class="note" id="yasho-target-label">的中した位置をタップしてください。入力しなくても大丈夫です。</p>
+    <p class="note" id="yasho-target-label">矢所を入力・修正する立を選んでください。</p>
     <div id="yasho-pad" class="yasho-pad" role="button" aria-label="的。タップで矢所を記録"></div>
     <div class="shot-sub-buttons">
-      <button type="button" class="btn" id="btn-yasho-clear">矢所を消す</button>
-      <button type="button" class="btn" id="btn-yasho-skip">スキップ</button>
+      <button type="button" class="btn" id="btn-yasho-pop" hidden>1つ消す</button>
+      <button type="button" class="btn" id="btn-yasho-clear" hidden>全部消す</button>
+      <button type="button" class="btn" id="btn-yasho-back" hidden>立の選択に戻る</button>
       <button type="button" class="btn btn-primary" id="btn-yasho-done">閉じる</button>
     </div>
   </div>
