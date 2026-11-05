@@ -9,7 +9,7 @@
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="icon.svg">
-<link rel="stylesheet" href="styles.css?v=20251105-21">
+<link rel="stylesheet" href="styles.css?v=20251105-22">
 </head>
 <body>
 
@@ -281,6 +281,7 @@
         <p class="note" id="team-members-help" hidden>メンバーをタップすると、詳しい記録が開きます。</p>
         <div id="team-members"></div>
         <p class="note" id="team-member-note" hidden>メンバー同士の詳しい記録は、リーダーだけが見られます。</p>
+        <button type="button" class="btn btn-primary btn-big" id="btn-open-analysis" hidden>分析シートを開く</button>
       </div>
 
       <div class="card" id="member-detail-card" hidden>
@@ -317,6 +318,51 @@
           </div>
           <p class="note">IDとパスワードは本人のものなので、ここでは変更できません。パスワードを忘れたメンバーには、新しいログインIDで登録し直して招待コードで参加してもらい、新しいアカウントへ記録を引き継いでから、古い方のアカウントをここからチームから外してください。</p>
         </div>
+      </div>
+
+      <div class="card" id="analysis-card" hidden>
+        <button type="button" class="btn btn-quiet" id="btn-analysis-back">← チーム合計に戻る</button>
+        <h2>分析シート</h2>
+        <p class="note">期間とメンバーを選んで、的中率の推移と矢所の集中を見ます（リーダー用）。</p>
+
+        <div class="analysis-controls">
+          <label class="field">
+            <span>開始日</span>
+            <input type="date" id="analysis-start">
+          </label>
+          <label class="field">
+            <span>終了日</span>
+            <input type="date" id="analysis-end">
+          </label>
+          <div class="field">
+            <span>集計単位</span>
+            <div class="range-switch" role="group" aria-label="集計単位の切り替え">
+              <button type="button" data-aunit="day" class="active">日ごと</button>
+              <button type="button" data-aunit="week">週ごと</button>
+            </div>
+          </div>
+        </div>
+        <div class="shot-sub-buttons">
+          <button type="button" class="btn" data-aperiod="30days">過去30日</button>
+          <button type="button" class="btn" data-aperiod="month">今月</button>
+          <button type="button" class="btn" data-aperiod="lastMonth">先月</button>
+          <button type="button" class="btn" data-aperiod="total">全期間</button>
+        </div>
+
+        <h3>比べるメンバー（最大6人）</h3>
+        <div id="analysis-members" class="analysis-members"></div>
+        <p id="analysis-message" class="message" role="status"></p>
+
+        <h3>的中率の推移</h3>
+        <div id="analysis-legend" class="analysis-legend"></div>
+        <div id="analysis-chart" class="analysis-chart"></div>
+        <div id="analysis-trend-table"></div>
+
+        <h3>矢所の集中</h3>
+        <p class="note">選んだメンバーの矢所を、色ごとに重ねて表示します（＋印は重心＝矢所の平均位置）。</p>
+        <div id="analysis-yasho" class="yasho-view analysis-yasho"></div>
+        <div id="analysis-yasho-table"></div>
+        <p class="note">矢所は○×と結び付いていないため、ここで分かるのは矢所そのものの集中のしかたです。また、射数が少ない区間は的中率が大きく振れるため、射数もあわせて見てください。</p>
       </div>
 
       <div class="card">
@@ -409,6 +455,6 @@
   </div>
 </div>
 
-<script type="module" src="app.js?v=20251105-21"></script>
+<script type="module" src="app.js?v=20251105-22"></script>
 </body>
 </html>

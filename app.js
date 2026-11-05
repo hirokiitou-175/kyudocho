@@ -27,7 +27,7 @@ import {
   removePractice,
   deletePractices,
   transferPractices
-} from "./firebase.js?v=20251105-21";
+} from "./firebase.js?v=20251105-22";
 
 // ---------------- 状態 ----------------
 const state = {
@@ -41,6 +41,12 @@ const state = {
   teamRange: "month",  // month | total
   detailUid: null,     // メンバー詳細で表示中の uid
   pendingTransfer: null, // 引き継ぎ最終確認の内容 { fromUid, toUid, count }
+  analysisOpen: false, // 分析シートを表示中か
+  analysisStart: "",   // 分析シートの期間（開始日）
+  analysisEnd: "",     // 分析シートの期間（終了日）
+  analysisUnit: "day", // 分析シートの集計単位 day | week
+  analysisSelected: [], // 分析シートで比べるメンバーの uid
+  analysisInit: false, // 分析シートの初期選択が済んだか
   registering: false   // 新規登録の処理中は watchAuth の画面遷移を止める
 };
 
@@ -1027,11 +1033,18 @@ function renderTeam() {
     if (!rows.length) wrap.innerHTML = '<p class="empty">メンバーがいません。</p>';
   }
   // 一般メンバーには合計だけ（他人の詳細は出さない）
-  if (state.detailUid && isLeader) {
+  $("btn-open-analysis").hidden = !isLeader;
+  if (state.analysisOpen && isLeader) {
+    $("member-detail-card").hidden = true;
+    $("team-summary-card").hidden = true;
+    $("analysis-card").hidden = false;
+  } else if (state.detailUid && isLeader) {
     // 詳細は renderMemberDetail で表示済み
+    $("analysis-card").hidden = true;
   } else {
     $("member-detail-card").hidden = true;
     $("team-summary-card").hidden = false;
+    $("analysis-card").hidden = true;
   }
 
   // 記録の整理（リーダーのみ）：3年より前の記録の件数を出す
@@ -1051,6 +1064,454 @@ function oldPractices() {
   d.setFullYear(d.getFullYear() - 3);
   const cutoff = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
   return state.teamPractices.filter((p) => p.date && p.date <= cutoff);
+}
+
+// ---------------- 分析シート（リーダー用） ----------------
+// 期間（開始日〜終了日）と集計単位（日ごと／週ごと）を選んで、
+// 複数メンバーの的中率の推移を重ねて比べ、矢所の集中も見る。
+const ANALYSIS_COLORS = ["#c73e2c", "#2456a6", "#2e7d4f", "#7b4ba8", "#b7791f", "#00838f"];
+
+function parseDateStr(s) {
+  const [y, m, d] = String(s || "").split("-").map(Number);
+  if (!y || !m || !d) return null;
+  return new Date(y, m - 1, d);
+}
+function addDaysStr(s, n) {
+  const d = parseDateStr(s);
+  if (!d) return s;
+  d.setDate(d.getDate() + n);
+  return dateToStr(d);
+}
+function daysBetween(a, b) {
+  const da = parseDateStr(a);
+  const db = parseDateStr(b);
+  if (!da || !db) return NaN;
+  return Math.round((db - da) / 86400000);
+}
+function weekStartStr(s) {
+  const d = parseDateStr(s);
+  if (!d) return s;
+  d.setDate(d.getDate() - ((d.getDay() + 6) % 7)); // 月曜始まり
+  return dateToStr(d);
+}
+function shortDate(s) {
+  const p = String(s || "").split("-");
+  return p.length === 3 ? `${Number(p[1])}/${Number(p[2])}` : s;
+}
+
+// 記録の集まりから矢所の点を全部取り出す（新形式・旧形式の両対応）
+function collectYashoPoints(list) {
+  const points = [];
+  for (const p of list) {
+    for (const e of p.entries || []) {
+      if (Array.isArray(e.yashoGroups)) {
+        for (const g of e.yashoGroups) for (const pt of g || []) points.push(pt);
+      } else {
+        (e.shots || []).forEach((s, i) => {
+          const y = e.yasho && e.yasho[i];
+          if (y) points.push(y);
+        });
+      }
+    }
+  }
+  return points;
+}
+
+function initAnalysis() {
+  const today = todayStr();
+  if (!state.analysisStart) state.analysisStart = addDaysStr(today, -29);
+  if (!state.analysisEnd) state.analysisEnd = today;
+  $("analysis-start").value = state.analysisStart;
+  $("analysis-end").value = state.analysisEnd;
+  if (!state.analysisInit) {
+    const students = state.members.filter((m) => m.id !== state.user.uid);
+    state.analysisSelected = (students.length ? students : state.members)
+      .slice(0, 3)
+      .map((m) => m.id);
+    state.analysisInit = true;
+  }
+  const ids = state.members.map((m) => m.id);
+  state.analysisSelected = state.analysisSelected.filter((id) => ids.includes(id));
+}
+
+$("btn-open-analysis").addEventListener("click", () => {
+  if (state.profile?.role !== "leader") return;
+  state.analysisOpen = true;
+  state.detailUid = null;
+  initAnalysis();
+  $("team-summary-card").hidden = true;
+  $("member-detail-card").hidden = true;
+  $("analysis-card").hidden = false;
+  renderAnalysis();
+});
+$("btn-analysis-back").addEventListener("click", () => {
+  state.analysisOpen = false;
+  $("analysis-card").hidden = true;
+  $("team-summary-card").hidden = false;
+});
+$("analysis-start").addEventListener("change", (ev) => {
+  state.analysisStart = ev.target.value;
+  renderAnalysis();
+});
+$("analysis-end").addEventListener("change", (ev) => {
+  state.analysisEnd = ev.target.value;
+  renderAnalysis();
+});
+document.querySelectorAll("[data-aunit]").forEach((btn) => {
+  btn.addEventListener("click", () => {
+    state.analysisUnit = btn.dataset.aunit;
+    document.querySelectorAll("[data-aunit]").forEach((b) =>
+      b.classList.toggle("active", b === btn));
+    renderAnalysis();
+  });
+});
+document.querySelectorAll("[data-aperiod]").forEach((btn) => {
+  btn.addEventListener("click", () => {
+    const today = todayStr();
+    const kind = btn.dataset.aperiod;
+    if (kind === "30days") {
+      state.analysisStart = addDaysStr(today, -29);
+      state.analysisEnd = today;
+    } else if (kind === "month") {
+      state.analysisStart = `${monthStr(0)}-01`;
+      state.analysisEnd = today;
+    } else if (kind === "lastMonth") {
+      const ms = monthStr(-1);
+      const [y, m] = ms.split("-").map(Number);
+      const last = new Date(y, m, 0).getDate();
+      state.analysisStart = `${ms}-01`;
+      state.analysisEnd = `${ms}-${String(last).padStart(2, "0")}`;
+    } else if (kind === "total") {
+      const dates = state.teamPractices.map((p) => p.date).filter(Boolean).sort();
+      state.analysisStart = dates.length ? dates[0] : `${monthStr(0)}-01`;
+      state.analysisEnd = today;
+    }
+    $("analysis-start").value = state.analysisStart;
+    $("analysis-end").value = state.analysisEnd;
+    renderAnalysis();
+  });
+});
+
+function renderAnalysisMembers() {
+  const wrap = $("analysis-members");
+  wrap.innerHTML = "";
+  const selectedIndex = new Map(state.analysisSelected.map((id, i) => [id, i]));
+  for (const m of state.members) {
+    const idx = selectedIndex.get(m.id);
+    const label = document.createElement("label");
+    label.className = "analysis-member-check";
+    label.innerHTML = `
+      <input type="checkbox" ${idx !== undefined ? "checked" : ""}>
+      <span class="color-dot" style="background:${idx !== undefined ? ANALYSIS_COLORS[idx % ANALYSIS_COLORS.length] : "#d8d2c4"}"></span>
+      <span>${esc(m.name)}${m.grade ? `（${esc(m.grade)}）` : ""}${m.id === state.user.uid ? "（自分）" : ""}</span>`;
+    label.querySelector("input").addEventListener("change", (ev) => {
+      const msg = $("analysis-message");
+      if (ev.target.checked) {
+        if (state.analysisSelected.length >= ANALYSIS_COLORS.length) {
+          ev.target.checked = false;
+          msg.textContent = "比べられるのは6人までです。";
+          return;
+        }
+        state.analysisSelected.push(m.id);
+      } else {
+        state.analysisSelected = state.analysisSelected.filter((id) => id !== m.id);
+      }
+      msg.textContent = "";
+      renderAnalysis();
+    });
+    wrap.appendChild(label);
+  }
+}
+
+function analysisBuckets(start, end, unit) {
+  const buckets = [];
+  if (unit === "day") {
+    for (let cur = start; daysBetween(cur, end) >= 0; cur = addDaysStr(cur, 1)) {
+      buckets.push({ key: cur, label: shortDate(cur) });
+      if (buckets.length > 400) break;
+    }
+  } else {
+    for (let cur = weekStartStr(start); daysBetween(cur, end) >= 0; cur = addDaysStr(cur, 7)) {
+      buckets.push({ key: cur, label: `${shortDate(cur)}の週` });
+      if (buckets.length > 120) break;
+    }
+  }
+  return buckets;
+}
+
+function buildAnalysisSeries() {
+  const start = state.analysisStart;
+  const end = state.analysisEnd;
+  const unit = state.analysisUnit;
+  const buckets = analysisBuckets(start, end, unit);
+  return state.analysisSelected
+    .map((uid, i) => {
+      const member = state.members.find((m) => m.id === uid);
+      if (!member) return null;
+      const list = state.teamPractices.filter(
+        (p) => p.uid === uid && p.date >= start && p.date <= end
+      );
+      const byKey = new Map(buckets.map((b) => [b.key, { ...b, shots: 0, hits: 0 }]));
+      for (const p of list) {
+        const key = unit === "day" ? p.date : weekStartStr(p.date);
+        const b = byKey.get(key);
+        if (!b) continue;
+        const st = practiceStats(p);
+        b.shots += st.shots;
+        b.hits += st.hits;
+      }
+      const agg = [...byKey.values()].map((b) => ({
+        ...b,
+        rate: b.shots ? b.hits / b.shots : null
+      }));
+      return {
+        member,
+        uid,
+        color: ANALYSIS_COLORS[i % ANALYSIS_COLORS.length],
+        list,
+        buckets: agg,
+        total: sumStats(list),
+        points: collectYashoPoints(list)
+      };
+    })
+    .filter(Boolean);
+}
+
+function trendChartSvg(series, buckets) {
+  const W = 760, H = 340, L = 48, R = 16, T = 16, B = 54;
+  const pw = W - L - R;
+  const ph = H - T - B;
+  const x = (i) => (buckets.length === 1 ? L + pw / 2 : L + (pw * i) / (buckets.length - 1));
+  const y = (rate) => T + (1 - rate) * ph;
+  let g = "";
+  for (const gv of [0, 0.25, 0.5, 0.75, 1]) {
+    const gy = y(gv);
+    g += `<line x1="${L}" y1="${gy}" x2="${W - R}" y2="${gy}" stroke="#e3ddcf" stroke-width="1"/>` +
+      `<text x="${L - 6}" y="${gy + 4}" text-anchor="end" font-size="11" fill="#6f6a5e">${Math.round(gv * 100)}%</text>`;
+  }
+  const step = Math.max(1, Math.ceil(buckets.length / 10));
+  const crowded = buckets.length > 12;
+  buckets.forEach((b, i) => {
+    if (i % step !== 0 && i !== buckets.length - 1) return;
+    const lx = x(i);
+    const rotate = crowded ? ` transform="rotate(-30 ${lx} ${H - B + 8})"` : "";
+    g += `<text x="${lx}" y="${H - B + 18}" text-anchor="${crowded ? "end" : "middle"}" font-size="11" fill="#6f6a5e"${rotate}>${esc(b.label)}</text>`;
+  });
+  for (const s of series) {
+    let run = [];
+    const flush = () => {
+      if (run.length > 1) {
+        g += `<path d="${run.map((pt, j) => `${j ? "L" : "M"}${pt[0].toFixed(1)},${pt[1].toFixed(1)}`).join(" ")}" fill="none" stroke="${s.color}" stroke-width="3" stroke-linejoin="round" stroke-linecap="round"/>`;
+      }
+      run = [];
+    };
+    s.buckets.forEach((b, i) => {
+      if (b.rate === null) { flush(); return; }
+      run.push([x(i), y(b.rate)]);
+    });
+    flush();
+    s.buckets.forEach((b, i) => {
+      if (b.rate === null) return;
+      g += `<circle cx="${x(i)}" cy="${y(b.rate)}" r="4" fill="${s.color}" stroke="#fff" stroke-width="1.5"><title>${esc(s.member.name)}：${esc(b.label)} ${b.shots}射 ${b.hits}中（${Math.round(b.rate * 100)}%）</title></circle>`;
+    });
+  }
+  return `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="的中率の推移グラフ">${g}</svg>`;
+}
+
+function volatilityOf(rates) {
+  if (!rates.length) {
+    return { max: null, min: null, range: null, sd: null, label: "記録がありません" };
+  }
+  const max = Math.round(Math.max(...rates) * 100);
+  const min = Math.round(Math.min(...rates) * 100);
+  if (rates.length < 2) {
+    return { max, min, range: null, sd: null, label: "区間が1つだけです" };
+  }
+  const mean = rates.reduce((a, b) => a + b, 0) / rates.length;
+  const sd = Math.round(
+    Math.sqrt(rates.reduce((a, b) => a + (b - mean) ** 2, 0) / rates.length) * 100
+  );
+  return {
+    max,
+    min,
+    range: max - min,
+    sd,
+    label: sd >= 20 ? "波が大きい" : sd >= 10 ? "やや波がある" : "安定している"
+  };
+}
+
+function analysisTrendTable(series) {
+  if (!series.length) return "";
+  const rows = series.map((s) => {
+    const active = s.buckets.filter((b) => b.rate !== null);
+    const v = volatilityOf(active.map((b) => b.rate));
+    return `<tr>
+      <td><span class="color-dot" style="background:${s.color}"></span> ${esc(s.member.name)}</td>
+      <td>${s.total.shots}射</td>
+      <td>${s.total.hits}中</td>
+      <td>${rateText(s.total.shots, s.total.hits)}</td>
+      <td>${v.max != null ? v.max + "%" : "―"}</td>
+      <td>${v.min != null ? v.min + "%" : "―"}</td>
+      <td>${v.range != null ? v.range + "ポイント" : "―"}</td>
+      <td>${v.sd != null ? v.sd + "ポイント" : "―"}</td>
+      <td>${esc(v.label)}（${active.length}区間）</td>
+    </tr>`;
+  }).join("");
+  return `<div class="analysis-table-wrap"><table class="analysis-table">
+    <thead><tr><th>メンバー</th><th>射数</th><th>的中</th><th>的中率</th><th>最高</th><th>最低</th><th>変動幅</th><th>ばらつき</th><th>波の目安</th></tr></thead>
+    <tbody>${rows}</tbody></table></div>`;
+}
+
+function analysisYashoSvg(series) {
+  const dots = [];
+  const centers = [];
+  for (const s of series) {
+    for (const pt of s.points) {
+      dots.push(`<circle cx="${(110 + pt.x * 100).toFixed(1)}" cy="${(110 + pt.y * 100).toFixed(1)}" r="4.2" fill="${s.color}" fill-opacity="0.65" stroke="#fff" stroke-width="1"/>`);
+    }
+    if (s.points.length) {
+      const mx = s.points.reduce((a, p) => a + p.x, 0) / s.points.length;
+      const my = s.points.reduce((a, p) => a + p.y, 0) / s.points.length;
+      const cx = 110 + mx * 100;
+      const cy = 110 + my * 100;
+      const cross = `M ${(cx - 9).toFixed(1)} ${cy.toFixed(1)} H ${(cx + 9).toFixed(1)} M ${cx.toFixed(1)} ${(cy - 9).toFixed(1)} V ${(cy + 9).toFixed(1)}`;
+      centers.push(
+        `<path d="${cross}" stroke="#fff" stroke-width="5" stroke-linecap="round"/>` +
+        `<path d="${cross}" stroke="${s.color}" stroke-width="2.6" stroke-linecap="round"/>`
+      );
+    }
+  }
+  return `<svg viewBox="0 0 220 220" role="img" aria-label="矢所の集中">
+    <circle cx="110" cy="110" r="104" fill="#2b2b28"/>
+    <circle cx="110" cy="110" r="84.9" fill="#fffdf7"/>
+    <circle cx="110" cy="110" r="67.6" fill="#2b2b28"/>
+    <circle cx="110" cy="110" r="58.9" fill="#fffdf7"/>
+    <circle cx="110" cy="110" r="41.6" fill="#2b2b28"/>
+    <circle cx="110" cy="110" r="20.8" fill="#fffdf7"/>
+    ${dots.join("")}${centers.join("")}
+  </svg>`;
+}
+
+// 矢所の集中のしかた（座標は的の半径=1.04に換算し、cmは半径18cmで計算）
+function yashoMetrics(points) {
+  if (!points.length) return null;
+  const R = 1.04;
+  const norm = points.map((p) => ({ nx: p.x / R, ny: p.y / R }));
+  const n = norm.length;
+  const mx = norm.reduce((a, q) => a + q.nx, 0) / n;
+  const my = norm.reduce((a, q) => a + q.ny, 0) / n;
+  const meanDistCm = (norm.reduce((a, q) => a + Math.hypot(q.nx, q.ny), 0) / n) * 18;
+  const spreadCm = Math.sqrt(
+    norm.reduce((a, q) => a + (q.nx - mx) ** 2 + (q.ny - my) ** 2, 0) / n
+  ) * 18;
+  const centerPct = Math.round((norm.filter((q) => Math.hypot(q.nx, q.ny) <= 0.2).length / n) * 100);
+  const inPct = Math.round((norm.filter((q) => Math.hypot(q.nx, q.ny) <= 1).length / n) * 100);
+  const cxCm = mx * 18;
+  const cyCm = my * 18;
+  const parts = [];
+  if (cxCm >= 1) parts.push("右");
+  else if (cxCm <= -1) parts.push("左");
+  if (cyCm >= 1) parts.push("下");
+  else if (cyCm <= -1) parts.push("上");
+  const centroid = parts.length ? parts.join("") + "寄り" : "ほぼ中心";
+  const cells = new Map();
+  for (const q of norm) {
+    const col = q.nx < -1 / 3 ? 0 : q.nx > 1 / 3 ? 2 : 1;
+    const row = q.ny < -1 / 3 ? 0 : q.ny > 1 / 3 ? 2 : 1;
+    const key = `${col},${row}`;
+    cells.set(key, (cells.get(key) || 0) + 1);
+  }
+  let bestKey = "1,1";
+  let bestCount = -1;
+  for (const [key, count] of cells) {
+    if (count > bestCount) { bestKey = key; bestCount = count; }
+  }
+  const [bc, br] = bestKey.split(",").map(Number);
+  const colL = ["左", "中央", "右"][bc];
+  const rowL = ["上", "中央", "下"][br];
+  const area = bc === 1 && br === 1 ? "中央"
+    : br === 1 ? `${colL}寄り`
+    : bc === 1 ? `${rowL}寄り`
+    : `${colL}${rowL}`;
+  return {
+    count: n,
+    area,
+    areaPct: Math.round((bestCount / n) * 100),
+    meanDistCm: meanDistCm.toFixed(1),
+    centerPct,
+    inPct,
+    centroid,
+    spreadCm: spreadCm.toFixed(1),
+    spreadLabel: spreadCm <= 4 ? "よく集中" : spreadCm <= 7 ? "やや集中" : "広がりあり"
+  };
+}
+
+function analysisYashoTable(series) {
+  if (!series.length) return "";
+  const rows = series.map((s) => {
+    const mt = yashoMetrics(s.points);
+    if (!mt) {
+      return `<tr>
+        <td><span class="color-dot" style="background:${s.color}"></span> ${esc(s.member.name)}</td>
+        <td>0点</td><td>―</td><td>―</td><td>―</td><td>―</td><td>―</td><td>―</td><td>記録なし</td>
+      </tr>`;
+    }
+    return `<tr>
+      <td><span class="color-dot" style="background:${s.color}"></span> ${esc(s.member.name)}</td>
+      <td>${mt.count}点</td>
+      <td>${esc(mt.area)}</td>
+      <td>${mt.areaPct}%</td>
+      <td>${mt.meanDistCm}cm</td>
+      <td>${mt.centerPct}%</td>
+      <td>${mt.inPct}%</td>
+      <td>${esc(mt.centroid)}</td>
+      <td>${esc(mt.spreadLabel)}（${mt.spreadCm}cm）</td>
+    </tr>`;
+  }).join("");
+  return `<div class="analysis-table-wrap"><table class="analysis-table">
+    <thead><tr><th>メンバー</th><th>矢所</th><th>多い場所</th><th>その割合</th><th>中心からの平均</th><th>中白圏</th><th>的内</th><th>重心</th><th>広がり</th></tr></thead>
+    <tbody>${rows}</tbody></table></div>`;
+}
+
+function renderAnalysis() {
+  if (state.profile?.role !== "leader") return;
+  const msg = $("analysis-message");
+  renderAnalysisMembers();
+  const start = state.analysisStart;
+  const end = state.analysisEnd;
+  const clear = () => {
+    $("analysis-legend").innerHTML = "";
+    $("analysis-chart").innerHTML = "";
+    $("analysis-trend-table").innerHTML = "";
+    $("analysis-yasho").innerHTML = "";
+    $("analysis-yasho-table").innerHTML = "";
+  };
+  if (!start || !end || !(daysBetween(start, end) >= 0)) {
+    msg.textContent = "期間を確認してください（開始日が終了日より後になっています）。";
+    clear();
+    return;
+  }
+  if (daysBetween(start, end) > 366) {
+    msg.textContent = "期間は1年以内で選んでください。";
+    clear();
+    return;
+  }
+  msg.textContent = state.analysisSelected.length ? "" : "比べるメンバーを選んでください。";
+  const series = buildAnalysisSeries();
+  const buckets = analysisBuckets(start, end, state.analysisUnit);
+  $("analysis-legend").innerHTML = series.map((s) =>
+    `<span class="legend-item"><span class="color-dot" style="background:${s.color}"></span>${esc(s.member.name)}（${rateText(s.total.shots, s.total.hits)}）</span>`
+  ).join("");
+  const hasData = series.some((s) => s.buckets.some((b) => b.rate !== null));
+  $("analysis-chart").innerHTML = series.length && hasData
+    ? trendChartSvg(series, buckets)
+    : '<p class="empty">選択した期間に記録がありません。</p>';
+  $("analysis-trend-table").innerHTML = analysisTrendTable(series);
+  const hasPoints = series.some((s) => s.points.length);
+  $("analysis-yasho").innerHTML = series.length && hasPoints
+    ? analysisYashoSvg(series)
+    : '<p class="empty">選択した期間に矢所の記録がありません。</p>';
+  $("analysis-yasho-table").innerHTML = analysisYashoTable(series);
 }
 
 $("btn-cleanup").addEventListener("click", async () => {
@@ -1149,12 +1610,15 @@ function renderMemberDetail(uid) {
     $("detail-transfer-wrap").hidden = state.members.length <= 1;
   }
 
+  state.analysisOpen = false;
+  $("analysis-card").hidden = true;
   $("team-summary-card").hidden = true;
   $("member-detail-card").hidden = false;
 }
 $("btn-detail-back").addEventListener("click", () => {
   state.detailUid = null;
   $("member-detail-card").hidden = true;
+  $("analysis-card").hidden = true;
   $("team-summary-card").hidden = false;
 });
 
