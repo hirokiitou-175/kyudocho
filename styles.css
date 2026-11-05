@@ -62,13 +62,15 @@ h3 { font-size: 1rem; margin: 1rem 0 0.4rem; }
 .message.ok { color: #3c6e47; }
 
 /* 的モチーフ：霞的（直径36cm）の区分どおりの配分。
-   中心から 中白20%／1の黒40%まで／2の白56.7%まで／2の黒65%まで／3の白81.7%まで／外黒100% */
+   中心から 中白20%／1の黒40%まで／2の白56.7%まで／2の黒65%まで／3の白81.7%まで／外黒100%。
+   closest-side を付けないと％が「四隅までの距離」基準になり、配分がずれて外黒が画面外に
+   はみ出すため、必ず付けること。 */
 .target-mark {
   width: 84px; height: 84px;
   margin: 0 auto;
   border-radius: 50%;
   background:
-    radial-gradient(circle, #fffdf7 0 20%, var(--ink) 20% 40%, #fffdf7 40% 56.7%, var(--ink) 56.7% 65%, #fffdf7 65% 81.7%, var(--ink) 81.7% 100%);
+    radial-gradient(circle closest-side, #fffdf7 0 20%, var(--ink) 20% 40%, #fffdf7 40% 56.7%, var(--ink) 56.7% 65%, #fffdf7 65% 81.7%, var(--ink) 81.7% 100%);
   border: 2px solid var(--ink);
 }
 .target-mark.small { width: 34px; height: 34px; margin: 0; border-width: 1px; flex: none; }
