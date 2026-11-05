@@ -26,7 +26,7 @@ import {
   listPracticesByTeam,
   savePractice,
   removePractice
-} from "./firebase.js?v=20251105-7";
+} from "./firebase.js?v=20251105-8";
 
 // ---------------- 状態 ----------------
 const state = {

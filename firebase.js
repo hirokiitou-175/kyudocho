@@ -30,7 +30,7 @@ import {
   getDocs,
   serverTimestamp
 } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js";
-import { firebaseConfig } from "./firebase-config.js?v=20251105-7";
+import { firebaseConfig } from "./firebase-config.js?v=20251105-8";
 
 const app = initializeApp(firebaseConfig);
 export const auth = getAuth(app);
@@ -232,13 +232,26 @@ export async function listPracticesByTeam(teamId) {
     .sort((a, b) => (a.date < b.date ? 1 : -1));
 }
 
+// 記録の日から3年後の日時。Firestore の「有効期限（TTL）」設定と組み合わせて、
+// 3年たった記録が自動で消えるようにする（Firebase 側で practices コレクションの
+// expireAt フィールドに TTL を有効化しておくこと）。
+function expireAtFor(dateStr) {
+  const d = new Date(`${dateStr}T00:00:00+09:00`);
+  if (Number.isNaN(d.getTime())) return null;
+  d.setFullYear(d.getFullYear() + 3);
+  return d;
+}
+
 export async function savePractice(practiceId, data) {
+  const expireAt = data && data.date ? expireAtFor(data.date) : null;
+  const extra = expireAt ? { expireAt } : {};
   if (practiceId) {
-    await updateDoc(doc(db, "practices", practiceId), { ...data, updatedAt: serverTimestamp() });
+    await updateDoc(doc(db, "practices", practiceId), { ...data, ...extra, updatedAt: serverTimestamp() });
     return practiceId;
   }
   const ref = await addDoc(collection(db, "practices"), {
     ...data,
+    ...extra,
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp()
   });
