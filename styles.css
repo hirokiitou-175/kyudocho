@@ -28,6 +28,12 @@ body {
   line-height: 1.6;
 }
 
+/* 拡大縮小はピンチ操作だけにし、2連続タップ（ダブルタップ）では拡大しない。
+   manipulation は「スクロールとピンチは許可し、ダブルタップ拡大だけ無効」の指定。 */
+body, button, input, select, textarea, label, a, svg {
+  touch-action: manipulation;
+}
+
 h1, h2, h3, .app-title, .header-title {
   font-family: "Hiragino Mincho ProN", "Noto Serif JP", "Yu Mincho", serif;
   font-weight: 600;

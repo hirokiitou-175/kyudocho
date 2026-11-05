@@ -27,7 +27,7 @@ import {
   savePractice,
   removePractice,
   deletePractices
-} from "./firebase.js?v=20251105-12";
+} from "./firebase.js?v=20251105-13";
 
 // ---------------- 状態 ----------------
 const state = {
@@ -311,6 +311,13 @@ function startWatch() {
     await route();
   });
 }
+
+// ダブルタップ（ダブルクリック）で画面が拡大しないようにする保険。
+// 拡大縮小はピンチ操作だけに任せる。入力欄でのダブルタップ（単語選択など）は妨げない。
+document.addEventListener("dblclick", (ev) => {
+  if (ev.target.closest("input, textarea")) return;
+  ev.preventDefault();
+}, { passive: false });
 
 async function boot() {
   // メールリンクでのログインは終了した。古いリンクを開いた人への案内だけ出す。
