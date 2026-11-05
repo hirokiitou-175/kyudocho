@@ -27,7 +27,7 @@ import {
   removePractice,
   deletePractices,
   transferPractices
-} from "./firebase.js?v=20251105-20";
+} from "./firebase.js?v=20251105-21";
 
 // ---------------- 状態 ----------------
 const state = {
@@ -40,6 +40,7 @@ const state = {
   homeRange: "total",  // today | month | total
   teamRange: "month",  // month | total
   detailUid: null,     // メンバー詳細で表示中の uid
+  pendingTransfer: null, // 引き継ぎ最終確認の内容 { fromUid, toUid, count }
   registering: false   // 新規登録の処理中は watchAuth の画面遷移を止める
 };
 
@@ -1183,22 +1184,59 @@ $("btn-detail-save").addEventListener("click", async () => {
   }
 });
 
-// リーダーがメンバーの記録を別メンバーへ引き継ぐ
-$("btn-detail-transfer").addEventListener("click", async () => {
+// 引き継ぎの確認画面に出す、名前＋学年の表示
+function memberLabel(uid) {
+  const m = state.members.find((x) => x.id === uid);
+  if (!m) return "（不明）";
+  return m.grade ? `${m.name}（${m.grade}）` : m.name;
+}
+
+// リーダーがメンバーの記録を別メンバーへ引き継ぐ（まず最終確認画面を出す）
+$("btn-detail-transfer").addEventListener("click", () => {
   const fromUid = state.detailUid;
   const toUid = $("detail-transfer-to").value;
   const msg = $("detail-manage-message");
-  if (!fromUid || !toUid) return;
-  const count = state.teamPractices.filter((p) => p.uid === fromUid).length;
-  if (!count) {
+  if (!fromUid || !toUid || fromUid === toUid) return;
+  const list = state.teamPractices.filter((p) => p.uid === fromUid);
+  if (!list.length) {
     msg.textContent = "引き継ぐ記録がありません。";
     msg.classList.remove("ok");
     return;
   }
-  if (!window.confirm(`${memberName(fromUid)} さんの記録 ${count}件を、${memberName(toUid)} さんへ引き継ぎます。よろしいですか？`)) return;
-  $("btn-detail-transfer").disabled = true;
+  const dates = list.map((p) => p.date).filter(Boolean).sort();
+  state.pendingTransfer = { fromUid, toUid, count: list.length };
+  $("transfer-from").textContent = memberLabel(fromUid);
+  $("transfer-to").textContent = memberLabel(toUid);
+  $("transfer-count").textContent = `${list.length}件`;
+  $("transfer-period").textContent = dates.length ? `${dates[0]} ～ ${dates[dates.length - 1]}` : "―";
+  $("transfer-panel").hidden = false;
+});
+
+$("btn-transfer-cancel").addEventListener("click", () => {
+  state.pendingTransfer = null;
+  $("transfer-panel").hidden = true;
+});
+
+$("btn-transfer-confirm").addEventListener("click", async () => {
+  const pending = state.pendingTransfer;
+  const msg = $("detail-manage-message");
+  if (!pending) return;
+  const { fromUid, toUid, count } = pending;
+  // 確認画面を開いてから記録が変わっていたら、間違いを防ぐため実行しない
+  const currentCount = state.teamPractices.filter((p) => p.uid === fromUid).length;
+  if (currentCount !== count) {
+    state.pendingTransfer = null;
+    $("transfer-panel").hidden = true;
+    msg.textContent = "記録の件数が変わっています。もう一度、引き継ぎ先を確認してください。";
+    msg.classList.remove("ok");
+    return;
+  }
+  $("btn-transfer-confirm").disabled = true;
+  $("btn-transfer-cancel").disabled = true;
   try {
     const moved = await transferPractices(fromUid, toUid);
+    state.pendingTransfer = null;
+    $("transfer-panel").hidden = true;
     await refreshData();
     renderMemberDetail(fromUid);
     const msg2 = $("detail-manage-message");
@@ -1206,10 +1244,12 @@ $("btn-detail-transfer").addEventListener("click", async () => {
     msg2.classList.add("ok");
   } catch (e) {
     console.error(e);
+    $("transfer-panel").hidden = true;
     msg.textContent = "引き継ぎに失敗しました。通信環境を確認してください。";
     msg.classList.remove("ok");
   } finally {
-    $("btn-detail-transfer").disabled = false;
+    $("btn-transfer-confirm").disabled = false;
+    $("btn-transfer-cancel").disabled = false;
   }
 });
 

@@ -9,7 +9,7 @@
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="icon.svg">
-<link rel="stylesheet" href="styles.css?v=20251105-20">
+<link rel="stylesheet" href="styles.css?v=20251105-21">
 </head>
 <body>
 
@@ -312,7 +312,7 @@
               <select id="detail-transfer-to"></select>
             </label>
             <div class="shot-sub-buttons">
-              <button type="button" class="btn" id="btn-detail-transfer">このメンバーへ記録を引き継ぐ</button>
+              <button type="button" class="btn" id="btn-detail-transfer">引き継ぎの最終確認へ進む</button>
             </div>
           </div>
           <p class="note">IDとパスワードは本人のものなので、ここでは変更できません。パスワードを忘れたメンバーには、新しいログインIDで登録し直して招待コードで参加してもらい、新しいアカウントへ記録を引き継いでから、古い方のアカウントをここからチームから外してください。</p>
@@ -381,6 +381,25 @@
   </div>
 </div>
 
+<!-- 記録の引き継ぎ最終確認 -->
+<div id="transfer-panel" class="overlay" hidden>
+  <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="transfer-title">
+    <h2 id="transfer-title">引き継ぎの最終確認</h2>
+    <p class="note">間違いがないか、引き継ぎ元と引き継ぎ先を確認してください。</p>
+    <table>
+      <tr><td>引き継ぎ元</td><td id="transfer-from"></td></tr>
+      <tr><td>引き継ぎ先</td><td id="transfer-to"></td></tr>
+      <tr><td>引き継ぐ記録</td><td id="transfer-count"></td></tr>
+      <tr><td>記録の期間</td><td id="transfer-period"></td></tr>
+    </table>
+    <p class="note">引き継ぐと、記録は引き継ぎ元から無くなり、引き継ぎ先の記録になります。この操作は取り消せません。</p>
+    <div class="shot-sub-buttons">
+      <button type="button" class="btn" id="btn-transfer-cancel">キャンセル</button>
+      <button type="button" class="btn btn-danger" id="btn-transfer-confirm">この内容で引き継ぐ</button>
+    </div>
+  </div>
+</div>
+
 <!-- 保存時のまとめ -->
 <div id="summary-panel" class="overlay" hidden>
   <div class="sheet">
@@ -390,6 +409,6 @@
   </div>
 </div>
 
-<script type="module" src="app.js?v=20251105-20"></script>
+<script type="module" src="app.js?v=20251105-21"></script>
 </body>
 </html>
