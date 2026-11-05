@@ -9,7 +9,7 @@
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="icon.svg">
-<link rel="stylesheet" href="styles.css?v=20251105-11">
+<link rel="stylesheet" href="styles.css?v=20251105-12">
 </head>
 <body>
 
@@ -262,8 +262,8 @@
         </div>
         <div class="shot-sub-buttons">
           <button type="button" class="btn" id="btn-undo">1射戻す</button>
-          <button type="button" class="btn" id="btn-yasho-edit">矢所の入力・修正</button>
         </div>
+        <p class="note">矢所は、各立・射込みの横の「矢所」ボタンから入れます。</p>
 
         <label class="field">
           <span>メモ</span>
@@ -374,12 +374,11 @@
 <div id="yasho-panel" class="overlay" hidden>
   <div class="sheet">
     <h2>矢所（任意）</h2>
-    <p class="note" id="yasho-target-label">矢所を入力・修正する立を選んでください。</p>
+    <p class="note" id="yasho-target-label">的をタップして矢所を入れてください。</p>
     <div id="yasho-pad" class="yasho-pad" role="button" aria-label="的。タップで矢所を記録"></div>
     <div class="shot-sub-buttons">
       <button type="button" class="btn" id="btn-yasho-pop" hidden>1つ消す</button>
       <button type="button" class="btn" id="btn-yasho-clear" hidden>全部消す</button>
-      <button type="button" class="btn" id="btn-yasho-back" hidden>立の選択に戻る</button>
       <button type="button" class="btn btn-primary" id="btn-yasho-done">閉じる</button>
     </div>
   </div>
@@ -394,6 +393,6 @@
   </div>
 </div>
 
-<script type="module" src="app.js?v=20251105-11"></script>
+<script type="module" src="app.js?v=20251105-12"></script>
 </body>
 </html>

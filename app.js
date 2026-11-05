@@ -27,7 +27,7 @@ import {
   savePractice,
   removePractice,
   deletePractices
-} from "./firebase.js?v=20251105-11";
+} from "./firebase.js?v=20251105-12";
 
 // ---------------- 状態 ----------------
 const state = {
@@ -802,8 +802,11 @@ function renderEditor() {
       const div = document.createElement("div");
       div.className = "group";
       const idx = w.shots.slice(i, i + size);
-      const yashoCount = (w.yashoGroups[Math.floor(i / size)] || []).length;
-      div.innerHTML = `<div class="g-title">${TYPE_LABEL[type]} ${Math.floor(i / size) + 1}${idx.length < size ? "（途中）" : ""}${yashoCount ? `（矢所 ${yashoCount}点）` : ""}</div>`;
+      const groupIndex = Math.floor(i / size);
+      const yashoCount = (w.yashoGroups[groupIndex] || []).length;
+      div.innerHTML = `<div class="g-title">${TYPE_LABEL[type]} ${groupIndex + 1}${idx.length < size ? "（途中）" : ""}</div>`;
+      const row = document.createElement("div");
+      row.className = "group-row";
       const chips = document.createElement("div");
       chips.className = "chips";
       idx.forEach((shot, j) => {
@@ -819,7 +822,16 @@ function renderEditor() {
         });
         chips.appendChild(chip);
       });
-      div.appendChild(chips);
+      row.appendChild(chips);
+      // 矢所は、その立・射込みの横のボタンから直接開いて入れる
+      const yb = document.createElement("button");
+      yb.type = "button";
+      yb.className = "btn yasho-open";
+      yb.textContent = `矢所（${yashoCount}／${idx.length}）`;
+      yb.title = "この立・射込みの矢所を入力・修正する";
+      yb.addEventListener("click", () => openYashoPanel(type, groupIndex));
+      row.appendChild(yb);
+      div.appendChild(row);
       wrap.appendChild(div);
     }
   }
@@ -834,7 +846,7 @@ function renderEditor() {
 }
 
 function addShot(hit) {
-  // 矢所はここでは聞かない。「矢所の入力・修正」から、立ごとにまとめて入れる。
+  // 矢所はここでは聞かない。各立・射込みの横の「矢所」ボタンから入れる。
   const w = editor.work[editor.mode];
   w.shots.push(hit);
   renderEditor();
@@ -904,7 +916,7 @@ function showSummary(data) {
 $("btn-summary-close").addEventListener("click", () => { $("summary-panel").hidden = true; });
 
 // ---------------- 矢所パネル ----------------
-// 矢所は「矢所の入力・修正」からのみ入れる。立（グループ）ごとに、
+// 矢所は、各立・射込みの横の「矢所」ボタンから、その立ぶんだけ入れる。
 // ○×や何本目かを区別せず、外れも含めてまとめて的をタップして記録する。
 // yashoTarget: { type, group } 編集中の立
 let yashoTarget = null;
@@ -914,45 +926,9 @@ function groupLabel(type, group) {
 }
 
 function setYashoButtons(mode) {
-  // mode: "list"（立の選択中）| "pad"（的の入力中）
+  // mode: "pad"（的の入力中）
   $("btn-yasho-pop").hidden = mode !== "pad";
   $("btn-yasho-clear").hidden = mode !== "pad";
-  $("btn-yasho-back").hidden = mode !== "pad";
-}
-
-function openYashoGroupList() {
-  yashoTarget = null;
-  const groups = [];
-  for (const type of ["tachi", "shakomi"]) {
-    const w = editor.work[type];
-    const size = GROUP_SIZE[type];
-    const count = Math.ceil(w.shots.length / size);
-    for (let g = 0; g < count; g++) {
-      groups.push({ type, group: g, shots: groupShotCount(type, g), points: (w.yashoGroups[g] || []).length });
-    }
-  }
-  if (!groups.length) {
-    $("record-message").textContent = "まだ記録がありません。先に○×を入力してください。";
-    return;
-  }
-  $("yasho-target-label").textContent = "矢所を入力・修正する立を選んでください。";
-  const pad = $("yasho-pad");
-  pad.innerHTML = "";
-  const list = document.createElement("div");
-  list.style.width = "100%";
-  list.style.display = "grid";
-  list.style.gap = "0.45rem";
-  for (const g of groups) {
-    const b = document.createElement("button");
-    b.type = "button";
-    b.className = "btn";
-    b.textContent = `${groupLabel(g.type, g.group)}（${g.shots}射／矢所 ${g.points}点）`;
-    b.addEventListener("click", () => openYashoPanel(g.type, g.group));
-    list.appendChild(b);
-  }
-  pad.appendChild(list);
-  setYashoButtons("list");
-  $("yasho-panel").hidden = false;
 }
 
 function openYashoPanel(type, group) {
@@ -996,7 +972,6 @@ function closeYashoPanel() {
   $("yasho-panel").hidden = true;
 }
 $("btn-yasho-done").addEventListener("click", closeYashoPanel);
-$("btn-yasho-back").addEventListener("click", openYashoGroupList);
 $("btn-yasho-pop").addEventListener("click", () => {
   if (!yashoTarget) return;
   const pts = editor.work[yashoTarget.type].yashoGroups[yashoTarget.group] || [];
@@ -1010,9 +985,6 @@ $("btn-yasho-clear").addEventListener("click", () => {
   renderYashoPad();
   renderEditor();
 });
-
-// 「矢所の入力・修正」：立の一覧から選んで開く
-$("btn-yasho-edit").addEventListener("click", openYashoGroupList);
 
 // ---------------- チーム ----------------
 document.querySelectorAll("[data-trange]").forEach((btn) => {
