@@ -5,16 +5,16 @@
   publish = "."
   command = ""
 
-# JS / CSS は内容が変わることがあるため、長くキャッシュしない（最小限）
+# JS / CSS は更新がすぐ反映されるよう、キャッシュせず毎回確認させる
 [[headers]]
   for = "/*.js"
   [headers.values]
-    Cache-Control = "public, max-age=3600"
+    Cache-Control = "public, max-age=0, must-revalidate"
 
 [[headers]]
   for = "/*.css"
   [headers.values]
-    Cache-Control = "public, max-age=3600"
+    Cache-Control = "public, max-age=0, must-revalidate"
 
 [[headers]]
   for = "/*.html"
