@@ -27,7 +27,7 @@ import {
   savePractice,
   removePractice,
   deletePractices
-} from "./firebase.js?v=20251105-15";
+} from "./firebase.js?v=20251105-16";
 
 // ---------------- 状態 ----------------
 const state = {
@@ -184,25 +184,27 @@ function marksHtml(marks) {
 }
 
 // ---------------- 的グラフ（SVG） ----------------
-// 霞的（直径36cmの区分どおりの同心円）の上に、朱色の弧で的中率を重ねて表す。
-// 半径18cmを60pxに換算：中白12／1の黒24まで／2の白34まで／2の黒39まで／3の白49まで／外黒60。
+// 霞的（直径36cmの区分どおりの同心円）の、外周（黒い淵の外側）に
+// 朱色のメーター（弧）で的中率を表す。
+// 的の半径18cmを54pxに換算：中白10.8／1の黒21.6まで／2の白30.6まで／
+// 2の黒35.1まで／3の白44.1まで／外黒54。メーターは半径58.5（的の外側）。
 function targetGraphSvg(shots, hits) {
   const rate = shots ? hits / shots : 0;
-  const C = 2 * Math.PI * 52;
+  const C = 2 * Math.PI * 58.5;
   const arc = shots ? (C * rate).toFixed(1) : "0";
   const center = shots ? Math.round(rate * 100) + "%" : "―";
   return `
   <svg viewBox="0 0 128 128" role="img" aria-label="的中率 ${center}">
-    <circle cx="64" cy="64" r="60" fill="#2b2b28"/>
-    <circle cx="64" cy="64" r="49" fill="#fffdf7"/>
-    <circle cx="64" cy="64" r="39" fill="#2b2b28"/>
-    <circle cx="64" cy="64" r="34" fill="#fffdf7"/>
-    <circle cx="64" cy="64" r="24" fill="#2b2b28"/>
-    <circle cx="64" cy="64" r="12" fill="#fffdf7"/>
-    <circle cx="64" cy="64" r="52" fill="none" stroke="#c73e2c" stroke-width="5"
+    <circle cx="64" cy="64" r="54" fill="#2b2b28"/>
+    <circle cx="64" cy="64" r="44.1" fill="#fffdf7"/>
+    <circle cx="64" cy="64" r="35.1" fill="#2b2b28"/>
+    <circle cx="64" cy="64" r="30.6" fill="#fffdf7"/>
+    <circle cx="64" cy="64" r="21.6" fill="#2b2b28"/>
+    <circle cx="64" cy="64" r="10.8" fill="#fffdf7"/>
+    <circle cx="64" cy="64" r="58.5" fill="none" stroke="#c73e2c" stroke-width="5"
       stroke-dasharray="${arc} ${C.toFixed(1)}" transform="rotate(-90 64 64)" stroke-linecap="round"/>
-    <rect x="41" y="85" width="46" height="22" rx="6" fill="#faf6ec" stroke="#2b2b28" stroke-width="1"/>
-    <text x="64" y="101" text-anchor="middle" font-size="15" font-weight="700" fill="#2b2b28">${center}</text>
+    <rect x="41" y="80" width="46" height="22" rx="6" fill="#faf6ec" stroke="#2b2b28" stroke-width="1"/>
+    <text x="64" y="96" text-anchor="middle" font-size="15" font-weight="700" fill="#2b2b28">${center}</text>
   </svg>`;
 }
 
