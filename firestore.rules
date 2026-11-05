@@ -29,14 +29,16 @@ service cloud.firestore {
     }
 
     // リーダーがメンバーの名前・学年だけを直す更新かどうか
-    // （チーム・役割・ログインID・メールは変えられない）
+    // （チーム・役割・ログインIDは変えられない）
+    // email は、ある場合だけ「変わっていないこと」を確認する
+    // （2026-11-05以降の登録ではプロフィールに email を保存しないため）
     function leaderProfileEdit() {
       return resource.data.teamId != null
         && isLeaderOf(resource.data.teamId)
         && request.resource.data.teamId == resource.data.teamId
         && request.resource.data.role == resource.data.role
         && request.resource.data.loginId == resource.data.loginId
-        && request.resource.data.email == resource.data.email;
+        && request.resource.data.get('email', null) == resource.data.get('email', null);
     }
 
     // リーダーがメンバーをチームから外す更新かどうか
@@ -47,7 +49,7 @@ service cloud.firestore {
         && request.resource.data.teamId == null
         && request.resource.data.role == null
         && request.resource.data.loginId == resource.data.loginId
-        && request.resource.data.email == resource.data.email
+        && request.resource.data.get('email', null) == resource.data.get('email', null)
         && request.resource.data.name == resource.data.name;
     }
 

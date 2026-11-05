@@ -9,7 +9,6 @@ import {
   signInWithEmailLink,
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
-  sendPasswordResetEmail,
   deleteUser,
   EmailAuthProvider,
   linkWithCredential,
@@ -31,7 +30,7 @@ import {
   getDocs,
   serverTimestamp
 } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js";
-import { firebaseConfig } from "./firebase-config.js?v=20251105-17";
+import { firebaseConfig } from "./firebase-config.js?v=20251105-18";
 
 const app = initializeApp(firebaseConfig);
 export const auth = getAuth(app);
@@ -80,23 +79,29 @@ export function watchAuth(callback) {
 }
 
 // ---------- ログインID＋パスワード ----------
-// パスワード自体は Firebase Auth が保管する（アカウントのメールアドレスに紐づく）。
-// ログインID（英数字）は usernames/{loginId} に { uid, email } を置き、
-// ログイン時に ID → メールアドレス → パスワードでログイン、の順に解決する。
+// パスワード自体は Firebase Auth が保管する。
+// Firebase のログインにはメールアドレス形式のIDが必要なため、新規登録では
+// ログインIDから内部専用のダミー文字列（pseudoEmailFor）を自動生成して使う。
+// 実際のメールアドレスは登録・保存せず、メールが送られることもない。
+// （2026-11-05より前にメールアドレスで登録したアカウントは、そのまま使える。）
+// ログインIDは usernames/{loginId} に { uid, email } を置き、
+// ログイン時に ID → 内部ID → パスワードでログイン、の順に解決する。
+
+// ログインIDから内部専用のダミー文字列を作る（IDの文字を16進数に変換したもの）
+export function pseudoEmailFor(loginId) {
+  const bytes = new TextEncoder().encode(loginId);
+  const hex = [...bytes].map((b) => b.toString(16).padStart(2, "0")).join("");
+  return `${hex}@kyudocho.local`;
+}
 
 export async function findEmailByLoginId(loginId) {
   const snap = await getDoc(doc(db, "usernames", loginId));
   return snap.exists() ? snap.data().email : null;
 }
 
-// メールアドレスとパスワードで新規アカウントを作る（登録フォーム用）
+// 内部IDとパスワードで新規アカウントを作る（登録フォーム用）
 export async function signUpWithEmail(email, password) {
   return createUserWithEmailAndPassword(auth, email, password);
-}
-
-// パスワード再設定メールを送る
-export async function sendPasswordResetMail(email) {
-  await sendPasswordResetEmail(auth, email);
 }
 
 // 作ったばかりの自分のアカウントを取り消す（登録の巻き戻し用）

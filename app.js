@@ -5,9 +5,8 @@ import {
   isEmailLink,
   signInWithId,
   signUpWithEmail,
-  sendPasswordResetMail,
+  pseudoEmailFor,
   deleteCurrentUser,
-  findEmailByLoginId,
   claimLoginId,
   releaseLoginId,
   setAccountPassword,
@@ -27,7 +26,7 @@ import {
   savePractice,
   removePractice,
   deletePractices
-} from "./firebase.js?v=20251105-17";
+} from "./firebase.js?v=20251105-18";
 
 // ---------------- 状態 ----------------
 const state = {
@@ -374,7 +373,6 @@ function setLoginTab(which) {
   $("login-tab-join").classList.toggle("active", which === "join");
   $("login-tab-create").classList.toggle("active", which === "create");
   $("login-id-form").hidden = which !== "login";
-  $("reset-form").hidden = true;
   $("join-code-form").hidden = true;
   $("reg-form").hidden = true;
   $("login-message").textContent = "";
@@ -411,36 +409,6 @@ $("login-id-form").addEventListener("submit", async (ev) => {
   }
 });
 
-// パスワードを忘れたとき（IDからメールを引いて再設定メールを送る）
-$("btn-forgot").addEventListener("click", () => {
-  $("login-id-form").hidden = true;
-  $("reset-form").hidden = false;
-  if (!$("reset-id").value) $("reset-id").value = $("login-id").value.trim();
-});
-$("btn-forgot-back").addEventListener("click", () => setLoginTab("login"));
-$("reset-form").addEventListener("submit", async (ev) => {
-  ev.preventDefault();
-  const loginId = $("reset-id").value.trim();
-  const msg = $("login-message");
-  try {
-    const email = await findEmailByLoginId(loginId);
-    if (!email) {
-      msg.textContent = "そのログインIDが見つかりませんでした。";
-      msg.classList.remove("ok");
-      return;
-    }
-    await sendPasswordResetMail(email);
-    msg.textContent = "再設定用のメールを送りました。メール内のリンクから、新しいパスワードを設定してください。";
-    msg.classList.add("ok");
-  } catch (e) {
-    console.error(e);
-    msg.classList.remove("ok");
-    msg.textContent = (e.code === "auth/too-many-requests" || e.code === "auth/quota-exceeded")
-      ? "送信の上限に達しました。しばらく時間をおいてからお試しください。"
-      : "送信に失敗しました。しばらくしてからもう一度お試しください。";
-  }
-});
-
 // 招待コードの入力（登録フォームへ進むだけ。コードの確認は登録の直後に行う）
 $("join-code-form").addEventListener("submit", (ev) => {
   ev.preventDefault();
@@ -459,8 +427,9 @@ $("reg-form").addEventListener("submit", async (ev) => {
   ev.preventDefault();
   const msg = $("login-message");
   msg.classList.remove("ok");
-  const email = $("reg-email").value.trim();
   const loginId = $("reg-id").value.trim();
+  // メールアドレスは使わない。ログインIDから内部専用のダミー文字列を作って使う。
+  const email = pseudoEmailFor(loginId);
   const name = $("reg-name").value.trim();
   const grade = $("reg-grade").value.trim();
   const password = $("reg-password").value;
@@ -520,7 +489,6 @@ $("reg-form").addEventListener("submit", async (ev) => {
       name,
       grade: grade || null,
       loginId,
-      email,
       teamId,
       role
     });
@@ -541,13 +509,12 @@ $("reg-form").addEventListener("submit", async (ev) => {
       state.user = null;
       msg.textContent = "そのログインIDは既に使われています。別のIDにしてください。";
     } else if (e.code === "auth/email-already-in-use") {
-      msg.textContent = "そのメールアドレスは登録済みです。「ログイン」から入るか、パスワードの再設定をお試しください。";
-    } else if (e.code === "auth/invalid-email") {
-      msg.textContent = "メールアドレスの形式を確認してください。";
+      // 内部IDはログインIDから作るため、このエラーは「IDが使用済み」を意味する
+      msg.textContent = "そのログインIDは既に使われています。別のIDにしてください。";
     } else if (e.code === "auth/weak-password") {
       msg.textContent = "パスワードは6文字以上で入力してください。";
     } else if (e.code === "auth/operation-not-allowed") {
-      msg.textContent = "メールアドレスとパスワードでの登録が有効になっていません。管理者に連絡してください。";
+      msg.textContent = "アカウントの登録が有効になっていません。管理者に連絡してください。";
     } else {
       msg.textContent = "登録に失敗しました。通信環境を確認してもう一度お試しください。";
     }
@@ -567,8 +534,7 @@ $("profile-form").addEventListener("submit", async (ev) => {
       name,
       grade: grade || null,
       teamId: state.profile?.teamId ?? null,
-      role: state.profile?.role ?? null,
-      email: state.user.email || null
+      role: state.profile?.role ?? null
     });
     await loadProfileAndTeam();
     await route();
@@ -614,8 +580,7 @@ $("setup-form").addEventListener("submit", async (ev) => {
     await saveUserProfile(state.user.uid, {
       name,
       grade: grade || null,
-      loginId,
-      email: state.user.email || null
+      loginId
     });
     if (password) await setAccountPassword(state.user, password);
     $("setup-password").value = "";
@@ -1227,7 +1192,6 @@ $("btn-detail-remove").addEventListener("click", async () => {
 // ここではパスワードの変更だけを行う。
 function renderAccount() {
   $("account-current-id").textContent = state.profile?.loginId || "未設定";
-  $("account-email").textContent = state.profile?.email || state.user?.email || "未登録";
 }
 
 $("account-form").addEventListener("submit", async (ev) => {

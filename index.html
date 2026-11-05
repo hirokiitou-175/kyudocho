@@ -9,7 +9,7 @@
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="icon.svg">
-<link rel="stylesheet" href="styles.css?v=20251105-17">
+<link rel="stylesheet" href="styles.css?v=20251105-18">
 </head>
 <body>
 
@@ -44,17 +44,7 @@
       </label>
       <button type="submit" class="btn btn-primary btn-big" id="login-id-send">ログイン</button>
       <p class="note">初めての方は「招待コードで参加」から登録してください。チームを作る人は「チームを作る」からどうぞ。</p>
-      <button type="button" class="btn btn-quiet" id="btn-forgot">パスワードを忘れた方はこちら</button>
-    </form>
-
-    <form id="reset-form" class="stack" hidden>
-      <p class="muted">ログインIDを入れると、登録したメールアドレス宛に、パスワード再設定用のメールを送ります。</p>
-      <label class="field">
-        <span>ログインID</span>
-        <input type="text" id="reset-id" autocomplete="username" autocapitalize="none" required placeholder="例：yuki_01">
-      </label>
-      <button type="submit" class="btn btn-primary btn-big">再設定メールを送る</button>
-      <button type="button" class="btn btn-quiet" id="btn-forgot-back">ログインに戻る</button>
+      <p class="note">パスワードを忘れたときは、リーダー（先生）に相談してください。</p>
     </form>
 
     <form id="join-code-form" class="stack" hidden>
@@ -71,10 +61,6 @@
       <label class="field" id="reg-team-wrap" hidden>
         <span>チーム名</span>
         <input type="text" id="reg-team-name" maxlength="40" placeholder="例：○○高校 弓道部">
-      </label>
-      <label class="field">
-        <span>メールアドレス（必須）</span>
-        <input type="email" id="reg-email" inputmode="email" autocomplete="email" required placeholder="example@mail.com">
       </label>
       <label class="field">
         <span>ログインID（6文字以上）</span>
@@ -98,7 +84,7 @@
       </label>
       <button type="submit" class="btn btn-primary btn-big" id="reg-submit">登録する</button>
       <button type="button" class="btn btn-quiet" id="reg-back" hidden>招待コードを入力し直す</button>
-      <p class="note">メールアドレスは、パスワードを忘れたときに再設定のメールを受け取るために使います。ログインには使いません。</p>
+      <p class="note">メールアドレスの入力はありません。ログインIDとパスワードは忘れないようにしてください（忘れたときはリーダーに相談してください）。</p>
     </form>
     <p id="login-message" class="message" role="status"></p>
   </div>
@@ -318,7 +304,7 @@
             <button type="button" class="btn btn-danger" id="btn-detail-remove">チームから外す</button>
           </div>
           <p id="detail-manage-message" class="message" role="status"></p>
-          <p class="note">IDとパスワードは本人のものなので、ここでは変更できません。パスワードを忘れたメンバーには、ログイン画面から再設定メールを送るよう伝えてください。チームから外しても、その人の過去の記録はチームの合計に残ります。</p>
+          <p class="note">IDとパスワードは本人のものなので、ここでは変更できません。パスワードを忘れたメンバーには、新しいログインIDで登録し直して招待コードで参加してもらい、そのあとで古い方のアカウントをここからチームから外してください。記録は古いアカウント側に残り、新しいアカウントには引き継がれません（チームの合計には残ります）。</p>
         </div>
       </div>
 
@@ -349,7 +335,7 @@
 
       <div class="card">
         <h2>ログインIDとパスワード</h2>
-        <p class="note">いまのログインID：<strong id="account-current-id">未設定</strong>（ログインIDは変更できません）<br>登録メールアドレス：<span id="account-email">未登録</span></p>
+        <p class="note">いまのログインID：<strong id="account-current-id">未設定</strong>（ログインIDは変更できません）</p>
         <form id="account-form" class="stack">
           <label class="field">
             <span>新しいパスワード（6文字以上）</span>
@@ -358,7 +344,7 @@
           <button type="submit" class="btn btn-primary">パスワードを変更する</button>
         </form>
         <p id="account-message" class="message" role="status"></p>
-        <p class="note">パスワードを忘れたときは、ログアウトして、ログイン画面の「パスワードを忘れた方はこちら」から再設定メールを送ってください。</p>
+        <p class="note">パスワードを忘れてログインできなくなったときは、リーダー（先生）に相談してください。</p>
       </div>
     </div>
   </main>
@@ -393,6 +379,6 @@
   </div>
 </div>
 
-<script type="module" src="app.js?v=20251105-17"></script>
+<script type="module" src="app.js?v=20251105-18"></script>
 </body>
 </html>
