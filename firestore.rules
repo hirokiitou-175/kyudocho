@@ -22,6 +22,35 @@ service cloud.firestore {
     }
 
     // 自分の users ドキュメントにある所属チームID
+    // 指定したチームのリーダーかどうか
+    function isLeaderOf(teamId) {
+      return teamId != null
+        && get(/databases/$(database)/documents/teams/$(teamId)).data.leaderUid == request.auth.uid;
+    }
+
+    // リーダーがメンバーの名前・学年だけを直す更新かどうか
+    // （チーム・役割・ログインID・メールは変えられない）
+    function leaderProfileEdit() {
+      return resource.data.teamId != null
+        && isLeaderOf(resource.data.teamId)
+        && request.resource.data.teamId == resource.data.teamId
+        && request.resource.data.role == resource.data.role
+        && request.resource.data.loginId == resource.data.loginId
+        && request.resource.data.email == resource.data.email;
+    }
+
+    // リーダーがメンバーをチームから外す更新かどうか
+    // （チームと役割を空にすることだけを許可し、名前など他は変えられない）
+    function leaderRemoveMember() {
+      return resource.data.teamId != null
+        && isLeaderOf(resource.data.teamId)
+        && request.resource.data.teamId == null
+        && request.resource.data.role == null
+        && request.resource.data.loginId == resource.data.loginId
+        && request.resource.data.email == resource.data.email
+        && request.resource.data.name == resource.data.name;
+    }
+
     function myTeamId() {
       return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.teamId;
     }
@@ -30,7 +59,9 @@ service cloud.firestore {
       allow read: if signedIn()
         && (request.auth.uid == uid
             || (resource.data.teamId != null && resource.data.teamId == myTeamId()));
-      allow create, update: if signedIn() && request.auth.uid == uid;
+      allow create: if signedIn() && request.auth.uid == uid;
+      allow update: if signedIn()
+        && (request.auth.uid == uid || leaderProfileEdit() || leaderRemoveMember());
       allow delete: if false;
     }
 

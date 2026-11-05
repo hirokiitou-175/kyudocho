@@ -8,6 +8,9 @@ import {
   isSignInWithEmailLink,
   signInWithEmailLink,
   signInWithEmailAndPassword,
+  createUserWithEmailAndPassword,
+  sendPasswordResetEmail,
+  deleteUser,
   EmailAuthProvider,
   linkWithCredential,
   updatePassword,
@@ -27,7 +30,7 @@ import {
   getDocs,
   serverTimestamp
 } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js";
-import { firebaseConfig } from "./firebase-config.js?v=20251105-6";
+import { firebaseConfig } from "./firebase-config.js?v=20251105-7";
 
 const app = initializeApp(firebaseConfig);
 export const auth = getAuth(app);
@@ -83,6 +86,35 @@ export function watchAuth(callback) {
 export async function findEmailByLoginId(loginId) {
   const snap = await getDoc(doc(db, "usernames", loginId));
   return snap.exists() ? snap.data().email : null;
+}
+
+// メールアドレスとパスワードで新規アカウントを作る（登録フォーム用）
+export async function signUpWithEmail(email, password) {
+  return createUserWithEmailAndPassword(auth, email, password);
+}
+
+// パスワード再設定メールを送る
+export async function sendPasswordResetMail(email) {
+  await sendPasswordResetEmail(auth, email);
+}
+
+// 作ったばかりの自分のアカウントを取り消す（登録の巻き戻し用）
+export async function deleteCurrentUser(user) {
+  await deleteUser(user);
+}
+
+// リーダーがメンバーの名前・学年を直す（ルール側で変更範囲を制限）
+export async function updateMemberProfile(uid, data) {
+  await updateDoc(doc(db, "users", uid), { ...data, updatedAt: serverTimestamp() });
+}
+
+// リーダーがメンバーをチームから外す（アカウント自体は残る）
+export async function removeMemberFromTeam(uid) {
+  await updateDoc(doc(db, "users", uid), {
+    teamId: null,
+    role: null,
+    updatedAt: serverTimestamp()
+  });
 }
 
 export async function signInWithId(loginId, password) {

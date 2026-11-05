@@ -184,6 +184,8 @@ h3 { font-size: 1rem; margin: 1rem 0 0.4rem; }
   border-radius: 12px; border: 1px solid var(--line); background: #fff; cursor: pointer;
 }
 .mode-switch button.active { background: var(--ink); color: #fff; border-color: var(--ink); }
+.mode-switch.login-switch { grid-template-columns: 1fr 1fr 1fr; }
+.mode-switch.login-switch button { font-size: 0.82rem; padding: 0.7rem 0.1rem; }
 
 .groups { display: grid; gap: 0.7rem; margin: 0.6rem 0; }
 .group { border: 1px dashed var(--line); border-radius: 10px; padding: 0.55rem 0.7rem; background: #fff; }

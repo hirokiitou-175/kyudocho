@@ -2,11 +2,12 @@
 // 構成：ログイン（メールリンク）→ プロフィール → チーム所属 → ホーム／記録／チーム
 import {
   auth,
-  sendLoginLink,
   isEmailLink,
-  savedSignInEmail,
-  completeEmailLink,
   signInWithId,
+  signUpWithEmail,
+  sendPasswordResetMail,
+  deleteCurrentUser,
+  findEmailByLoginId,
   claimLoginId,
   releaseLoginId,
   setAccountPassword,
@@ -15,6 +16,8 @@ import {
   logout,
   getUserProfile,
   saveUserProfile,
+  updateMemberProfile,
+  removeMemberFromTeam,
   createTeam,
   findTeamByInviteCode,
   getTeam,
@@ -23,7 +26,7 @@ import {
   listPracticesByTeam,
   savePractice,
   removePractice
-} from "./firebase.js?v=20251105-6";
+} from "./firebase.js?v=20251105-7";
 
 // ---------------- 状態 ----------------
 const state = {
@@ -35,7 +38,8 @@ const state = {
   teamPractices: [],   // チーム全員の practices
   homeRange: "total",  // today | month | total
   teamRange: "month",  // month | total
-  detailUid: null      // メンバー詳細で表示中の uid
+  detailUid: null,     // メンバー詳細で表示中の uid
+  registering: false   // 新規登録の処理中は watchAuth の画面遷移を止める
 };
 
 // 記録編集中の内容（1日分）
@@ -288,34 +292,11 @@ async function loadProfileAndTeam() {
 }
 
 // ---------------- 起動 ----------------
-// メールリンクを開いたブラウザに、送信時のアドレスが残っていない場合
-// （メールアプリの中で開いた等）に、リンクを引き継ぐための置き場所。
-const PENDING_LINK_KEY = "kyudochoPendingEmailLink";
-
-// リンク送信に失敗したときの理由表示
-function sendErrorMessage(e) {
-  const code = e && e.code ? e.code : "";
-  if (code === "auth/operation-not-allowed") return "メールリンクが有効になっていません。Firebase側の設定が必要です。";
-  if (code === "auth/unauthorized-continue-uri" || code === "auth/invalid-continue-uri" || code === "auth/missing-continue-uri") return "このページのURLが、Firebaseの承認済みドメインに入っていません。";
-  if (code === "auth/too-many-requests" || code === "auth/quota-exceeded") return "送信の上限に達しました。しばらく時間をおいてからお試しください。";
-  if (code === "auth/invalid-email") return "メールアドレスの形式を確認してください。";
-  if (code === "auth/network-request-failed") return "通信に失敗しました。電波の良い場所で、もう一度お試しください。";
-  return "送信に失敗しました。アドレスを確認してもう一度お試しください。" + (code ? `（${code}）` : "");
-}
-
-function linkErrorMessage(e) {
-  if (e && (e.code === "auth/invalid-action-code" || e.code === "auth/expired-action-code")) {
-    return "リンクが無効でした。すでに使われたか、有効期限が切れています。新しいリンクを送って、届いたらすぐ開いてください。";
-  }
-  if (e && e.code === "auth/invalid-email") {
-    return "メールアドレスが、リンクを送ったものと違うようです。同じアドレスを入力してください。";
-  }
-  return "ログインに失敗しました。もう一度お試しください。";
-}
-
 function startWatch() {
   watchAuth(async (user) => {
     state.user = user;
+    // 新規登録の途中（アカウント作成直後など）は画面遷移しない
+    if (state.registering) return;
     if (user) {
       try {
         await loadProfileAndTeam();
@@ -331,47 +312,55 @@ function startWatch() {
 }
 
 async function boot() {
-  // メールリンクから戻ってきた場合、先にログインを完了させる
+  // メールリンクでのログインは終了した。古いリンクを開いた人への案内だけ出す。
   if (isEmailLink(window.location.href)) {
-    const linkUrl = window.location.href;
-    if (!savedSignInEmail()) {
-      // アドレスが残っていないブラウザで開かれた。ポップアップではなく、
-      // ログイン画面の中でアドレスを確認してから完了させる。
-      sessionStorage.setItem(PENDING_LINK_KEY, linkUrl);
-      showView("view-login");
-      setLoginTab("mail");
-      $("login-send").textContent = "ログインを完了する";
-      $("login-message").textContent =
-        "リンクを受け取りました。確認のため、リンクを送ったメールアドレスを入力して「ログインを完了する」を押してください。";
-      startWatch();
-      return;
-    }
-    try {
-      await completeEmailLink(linkUrl);
-      window.history.replaceState({}, document.title, window.location.pathname);
-    } catch (e) {
-      console.error(e);
-      showView("view-login");
-      setLoginTab("mail");
-      $("login-message").textContent = linkErrorMessage(e);
-      startWatch();
-      return;
-    }
+    window.history.replaceState({}, document.title, window.location.pathname);
+    showView("view-login");
+    $("login-message").textContent =
+      "メールリンクでのログインは終了しました。ログインIDとパスワードでログインしてください。初めての方は「招待コードで参加」から登録できます。";
   }
   startWatch();
 }
 
-// ---------------- ログイン ----------------
-// ログイン方法の切り替え（ID／メールリンク）
-function setLoginTab(which) {
-  $("login-tab-id").classList.toggle("active", which === "id");
-  $("login-tab-mail").classList.toggle("active", which === "mail");
-  $("login-id-form").hidden = which !== "id";
-  $("login-form").hidden = which !== "mail";
-  $("login-message").textContent = "";
+// ---------------- ログイン・新規登録 ----------------
+// 登録の進み具合（招待コードで参加／チームを作る）
+const regState = { mode: null, code: "" };
+
+function showRegForm() {
+  const isCreate = regState.mode === "create";
+  $("join-code-form").hidden = true;
+  $("reg-form").hidden = false;
+  $("reg-team-wrap").hidden = !isCreate;
+  $("reg-back").hidden = isCreate;
+  $("reg-context").textContent = isCreate
+    ? "チームを作る人の登録です。登録すると、あなたがそのチームのリーダーになります。"
+    : `招待コード「${regState.code}」のチームに参加します。`;
+  $("reg-submit").textContent = isCreate ? "登録してチームを作る" : "登録してチームに参加する";
 }
-$("login-tab-id").addEventListener("click", () => setLoginTab("id"));
-$("login-tab-mail").addEventListener("click", () => setLoginTab("mail"));
+
+// 入口タブの切り替え（ログイン／招待コードで参加／チームを作る）
+function setLoginTab(which) {
+  $("login-tab-login").classList.toggle("active", which === "login");
+  $("login-tab-join").classList.toggle("active", which === "join");
+  $("login-tab-create").classList.toggle("active", which === "create");
+  $("login-id-form").hidden = which !== "login";
+  $("reset-form").hidden = true;
+  $("join-code-form").hidden = true;
+  $("reg-form").hidden = true;
+  $("login-message").textContent = "";
+  $("login-message").classList.remove("ok");
+  if (which === "join") {
+    regState.mode = "join";
+    if (regState.code) showRegForm();
+    else $("join-code-form").hidden = false;
+  } else if (which === "create") {
+    regState.mode = "create";
+    showRegForm();
+  }
+}
+$("login-tab-login").addEventListener("click", () => setLoginTab("login"));
+$("login-tab-join").addEventListener("click", () => setLoginTab("join"));
+$("login-tab-create").addEventListener("click", () => setLoginTab("create"));
 
 $("login-id-form").addEventListener("submit", async (ev) => {
   ev.preventDefault();
@@ -392,42 +381,147 @@ $("login-id-form").addEventListener("submit", async (ev) => {
   }
 });
 
-$("login-form").addEventListener("submit", async (ev) => {
+// パスワードを忘れたとき（IDからメールを引いて再設定メールを送る）
+$("btn-forgot").addEventListener("click", () => {
+  $("login-id-form").hidden = true;
+  $("reset-form").hidden = false;
+  if (!$("reset-id").value) $("reset-id").value = $("login-id").value.trim();
+});
+$("btn-forgot-back").addEventListener("click", () => setLoginTab("login"));
+$("reset-form").addEventListener("submit", async (ev) => {
   ev.preventDefault();
-  const email = $("login-email").value.trim();
+  const loginId = $("reset-id").value.trim().toLowerCase();
   const msg = $("login-message");
-  $("login-send").disabled = true;
-  // リンクから戻ってきた直後（アドレス確認待ち）かどうか
-  const pending = sessionStorage.getItem(PENDING_LINK_KEY);
   try {
-    if (pending) {
-      await completeEmailLink(pending, () => email);
-      sessionStorage.removeItem(PENDING_LINK_KEY);
-      $("login-send").textContent = "リンクを送る";
-      window.history.replaceState({}, document.title, window.location.pathname);
-      msg.textContent = "";
-      // ログイン後の画面遷移は watchAuth → route() が行う
-    } else {
-      await sendLoginLink(email);
-      msg.textContent = "リンクを送りました。メールを確認して、リンクを開いてください。";
-      msg.classList.add("ok");
+    const email = await findEmailByLoginId(loginId);
+    if (!email) {
+      msg.textContent = "そのログインIDが見つかりませんでした。";
+      msg.classList.remove("ok");
+      return;
     }
+    await sendPasswordResetMail(email);
+    msg.textContent = "再設定用のメールを送りました。メール内のリンクから、新しいパスワードを設定してください。";
+    msg.classList.add("ok");
   } catch (e) {
     console.error(e);
     msg.classList.remove("ok");
-    if (pending) {
-      // アドレス違いのときは入れ直せるようリンクを保持し、それ以外は
-      // リンク自体が無効なので、次は新しいリンクを送れる状態に戻す
-      if (e.code !== "auth/invalid-email") {
-        sessionStorage.removeItem(PENDING_LINK_KEY);
-        $("login-send").textContent = "リンクを送る";
-      }
-      msg.textContent = linkErrorMessage(e);
+    msg.textContent = (e.code === "auth/too-many-requests" || e.code === "auth/quota-exceeded")
+      ? "送信の上限に達しました。しばらく時間をおいてからお試しください。"
+      : "送信に失敗しました。しばらくしてからもう一度お試しください。";
+  }
+});
+
+// 招待コードの入力（登録フォームへ進むだけ。コードの確認は登録の直後に行う）
+$("join-code-form").addEventListener("submit", (ev) => {
+  ev.preventDefault();
+  const code = $("join-code").value.trim().toUpperCase();
+  if (!code) return;
+  regState.code = code;
+  setLoginTab("join");
+});
+$("reg-back").addEventListener("click", () => {
+  regState.code = "";
+  setLoginTab("join");
+});
+
+// 新規登録（アカウント作成→ID登録→チーム参加または作成→プロフィール保存）
+$("reg-form").addEventListener("submit", async (ev) => {
+  ev.preventDefault();
+  const msg = $("login-message");
+  msg.classList.remove("ok");
+  const email = $("reg-email").value.trim();
+  const loginId = $("reg-id").value.trim().toLowerCase();
+  const name = $("reg-name").value.trim();
+  const grade = $("reg-grade").value.trim();
+  const password = $("reg-password").value;
+  const password2 = $("reg-password2").value;
+  const isCreate = regState.mode === "create";
+  const teamName = isCreate ? $("reg-team-name").value.trim() : "";
+
+  if (!/^[a-z0-9_]{3,20}$/.test(loginId)) {
+    msg.textContent = "ログインIDは、英小文字・数字・_ の3〜20文字で入力してください。";
+    return;
+  }
+  if (!name) {
+    msg.textContent = "名前を入力してください。";
+    return;
+  }
+  if (password.length < 6) {
+    msg.textContent = "パスワードは6文字以上で入力してください。";
+    return;
+  }
+  if (password !== password2) {
+    msg.textContent = "パスワード（確認）が一致しません。";
+    return;
+  }
+  if (isCreate && !teamName) {
+    msg.textContent = "チーム名を入力してください。";
+    return;
+  }
+  if (!isCreate && !regState.code) {
+    msg.textContent = "先に招待コードを入力してください。";
+    setLoginTab("join");
+    return;
+  }
+
+  $("reg-submit").disabled = true;
+  state.registering = true;
+  let cred = null;
+  try {
+    cred = await signUpWithEmail(email, password);
+    state.user = cred.user;
+    await claimLoginId(loginId, cred.user.uid, email);
+    let team = null;
+    let teamId = null;
+    let role = null;
+    if (isCreate) {
+      team = await createTeam(teamName, cred.user.uid);
+      teamId = team.id;
+      role = "leader";
     } else {
-      msg.textContent = sendErrorMessage(e);
+      team = await findTeamByInviteCode(regState.code);
+      if (team) {
+        teamId = team.id;
+        role = "member";
+      }
+    }
+    await saveUserProfile(cred.user.uid, {
+      name,
+      grade: grade || null,
+      loginId,
+      email,
+      teamId,
+      role
+    });
+    state.registering = false;
+    await loadProfileAndTeam();
+    await route();
+    if (!isCreate && !team) {
+      // コードのチームが見つからなかった。アカウントはできているので、
+      // チーム参加の画面でコードを入れ直してもらう。
+      $("setup-message").textContent = "アカウントは作成できましたが、招待コードのチームが見つかりませんでした。正しいコードを入力してください。";
+    }
+  } catch (e) {
+    console.error(e);
+    state.registering = false;
+    if (cred && e.code === "app/id-taken") {
+      // IDが使われていたら、作ったばかりのアカウントを取り消してやり直せるようにする
+      try { await deleteCurrentUser(cred.user); } catch (e2) { console.error(e2); }
+      state.user = null;
+      msg.textContent = "そのログインIDは既に使われています。別のIDにしてください。";
+    } else if (e.code === "auth/email-already-in-use") {
+      msg.textContent = "そのメールアドレスは登録済みです。「ログイン」から入るか、パスワードの再設定をお試しください。";
+    } else if (e.code === "auth/invalid-email") {
+      msg.textContent = "メールアドレスの形式を確認してください。";
+    } else if (e.code === "auth/weak-password") {
+      msg.textContent = "パスワードは6文字以上で入力してください。";
+    } else if (e.code === "auth/operation-not-allowed") {
+      msg.textContent = "メールアドレスとパスワードでの登録が有効になっていません。管理者に連絡してください。";
+    } else {
+      msg.textContent = "登録に失敗しました。通信環境を確認してもう一度お試しください。";
     }
   } finally {
-    $("login-send").disabled = false;
+    $("reg-submit").disabled = false;
   }
 });
 
@@ -1017,6 +1111,17 @@ function renderMemberDetail(uid) {
     box.appendChild(div);
   }
 
+  // リーダーが他のメンバーを見ているときだけ管理欄を出す
+  const target = state.members.find((m) => m.id === uid);
+  const canManage = state.profile?.role === "leader" && uid !== state.user.uid;
+  $("detail-manage").hidden = !canManage;
+  if (canManage && target) {
+    $("detail-edit-name").value = target.name || "";
+    $("detail-edit-grade").value = target.grade || "";
+    $("detail-manage-message").textContent = "";
+    $("detail-manage-message").classList.remove("ok");
+  }
+
   $("team-summary-card").hidden = true;
   $("member-detail-card").hidden = false;
 }
@@ -1026,64 +1131,84 @@ $("btn-detail-back").addEventListener("click", () => {
   $("team-summary-card").hidden = false;
 });
 
-// ---------------- ログインIDとパスワードの設定 ----------------
-function renderAccount() {
-  const cur = state.profile?.loginId || null;
-  $("account-current-id").textContent = cur || "未設定";
-  const idInput = $("account-id");
-  if (document.activeElement !== idInput && !idInput.value) {
-    idInput.placeholder = cur ? `いまは ${cur}（変えるときだけ入力）` : "例：yuki_01";
+// リーダーがメンバーの名前・学年を直す
+$("btn-detail-save").addEventListener("click", async () => {
+  const uid = state.detailUid;
+  if (!uid) return;
+  const name = $("detail-edit-name").value.trim();
+  const grade = $("detail-edit-grade").value.trim();
+  const msg = $("detail-manage-message");
+  if (!name) {
+    msg.textContent = "名前を入力してください。";
+    msg.classList.remove("ok");
+    return;
   }
+  try {
+    await updateMemberProfile(uid, { name, grade: grade || null });
+    await refreshData();
+    renderMemberDetail(uid);
+    const msg2 = $("detail-manage-message");
+    msg2.textContent = "保存しました。";
+    msg2.classList.add("ok");
+  } catch (e) {
+    console.error(e);
+    msg.textContent = "保存に失敗しました。通信環境を確認してください。";
+    msg.classList.remove("ok");
+  }
+});
+
+// リーダーがメンバーをチームから外す（アカウントと過去の記録は残る）
+$("btn-detail-remove").addEventListener("click", async () => {
+  const uid = state.detailUid;
+  if (!uid) return;
+  if (!window.confirm(`${memberName(uid)} さんをチームから外します。よろしいですか？`)) return;
+  try {
+    await removeMemberFromTeam(uid);
+    state.detailUid = null;
+    await refreshData();
+    renderTeam();
+  } catch (e) {
+    console.error(e);
+    const msg = $("detail-manage-message");
+    msg.textContent = "外せませんでした。通信環境を確認してください。";
+    msg.classList.remove("ok");
+  }
+});
+
+// ---------------- ログインIDとパスワード ----------------
+// ログインIDは登録時に決めたものを使う（変更はできない）。
+// ここではパスワードの変更だけを行う。
+function renderAccount() {
+  $("account-current-id").textContent = state.profile?.loginId || "未設定";
+  $("account-email").textContent = state.profile?.email || state.user?.email || "未登録";
 }
 
 $("account-form").addEventListener("submit", async (ev) => {
   ev.preventDefault();
   const msg = $("account-message");
-  const newId = $("account-id").value.trim().toLowerCase();
   const password = $("account-password").value;
-  const currentId = state.profile?.loginId || null;
+  if (!password) {
+    msg.textContent = "新しいパスワードを入力してください。";
+    msg.classList.remove("ok");
+    return;
+  }
+  if (password.length < 6) {
+    msg.textContent = "パスワードは6文字以上で入力してください。";
+    msg.classList.remove("ok");
+    return;
+  }
   try {
-    if (!newId && !password) {
-      msg.textContent = "ログインIDかパスワードのどちらかを入力してください。";
-      return;
-    }
-    if (newId) {
-      if (!/^[a-z0-9_]{3,20}$/.test(newId)) {
-        msg.textContent = "ログインIDは、英小文字・数字・_ の3〜20文字で入力してください。";
-        return;
-      }
-      if (newId !== currentId) {
-        await claimLoginId(newId, state.user.uid, state.user.email);
-        if (currentId) {
-          try { await releaseLoginId(currentId); } catch (e) { console.error(e); }
-        }
-        await saveUserProfile(state.user.uid, { loginId: newId });
-        state.profile = { ...state.profile, loginId: newId };
-      }
-    }
-    if (password) {
-      if (password.length < 6) {
-        msg.textContent = "パスワードは6文字以上で入力してください。";
-        return;
-      }
-      await setAccountPassword(state.user, password);
-    }
-    $("account-id").value = "";
+    await setAccountPassword(state.user, password);
     $("account-password").value = "";
-    renderAccount();
-    msg.textContent = "保存しました。次回からIDとパスワードでログインできます。";
+    msg.textContent = "パスワードを変更しました。";
     msg.classList.add("ok");
   } catch (e) {
     console.error(e);
     msg.classList.remove("ok");
-    if (e.code === "app/id-taken") {
-      msg.textContent = "そのログインIDは既に使われています。別のIDにしてください。";
-    } else if (e.code === "auth/requires-recent-login") {
-      msg.textContent = "安全のため、一度ログアウトして、メールリンクでログインし直してから設定してください。";
-    } else if (e.code === "auth/operation-not-allowed") {
-      msg.textContent = "パスワードでのログインがまだ有効になっていません。管理者（Firebaseの設定）側の有効化が必要です。";
+    if (e.code === "auth/requires-recent-login") {
+      msg.textContent = "安全のため、一度ログアウトしてログインし直してから変更してください。";
     } else {
-      msg.textContent = "保存に失敗しました。通信環境を確認してもう一度お試しください。";
+      msg.textContent = "変更に失敗しました。通信環境を確認してもう一度お試しください。";
     }
   }
 });

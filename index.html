@@ -9,7 +9,7 @@
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="icon.svg">
-<link rel="stylesheet" href="styles.css?v=20251105-6">
+<link rel="stylesheet" href="styles.css?v=20251105-7">
 </head>
 <body>
 
@@ -27,9 +27,10 @@
   <div class="center-box">
     <div class="target-mark" aria-hidden="true"></div>
     <h1 class="app-title">弓道帳</h1>
-    <div class="mode-switch" role="group" aria-label="ログイン方法の切り替え">
-      <button type="button" id="login-tab-id" class="active">IDでログイン</button>
-      <button type="button" id="login-tab-mail">メールリンク</button>
+    <div class="mode-switch login-switch" role="group" aria-label="ログインと登録の切り替え">
+      <button type="button" id="login-tab-login" class="active">ログイン</button>
+      <button type="button" id="login-tab-join">招待コードで参加</button>
+      <button type="button" id="login-tab-create">チームを作る</button>
     </div>
 
     <form id="login-id-form" class="stack">
@@ -42,17 +43,62 @@
         <input type="password" id="login-password" autocomplete="current-password" required>
       </label>
       <button type="submit" class="btn btn-primary btn-big" id="login-id-send">ログイン</button>
-      <p class="note">ログインIDとパスワードは、初回ログインのあとに「チーム」タブ下の「ログインIDとパスワード」で設定できます。まだ設定していない人は「メールリンク」から入ってください。</p>
+      <p class="note">初めての方は「招待コードで参加」から登録してください。チームを作る人は「チームを作る」からどうぞ。</p>
+      <button type="button" class="btn btn-quiet" id="btn-forgot">パスワードを忘れた方はこちら</button>
     </form>
 
-    <form id="login-form" class="stack" hidden>
-      <p class="muted">メールアドレスにログイン用リンクを送ります。<br>初回の登録と、パスワードを忘れたとき用です。</p>
+    <form id="reset-form" class="stack" hidden>
+      <p class="muted">ログインIDを入れると、登録したメールアドレス宛に、パスワード再設定用のメールを送ります。</p>
       <label class="field">
-        <span>メールアドレス</span>
-        <input type="email" id="login-email" inputmode="email" autocomplete="email" required placeholder="example@mail.com">
+        <span>ログインID</span>
+        <input type="text" id="reset-id" autocomplete="username" autocapitalize="none" required placeholder="例：yuki_01">
       </label>
-      <button type="submit" class="btn btn-primary btn-big" id="login-send">リンクを送る</button>
-      <p class="note">届いたメール内のリンクを、この端末のブラウザで開いてください。</p>
+      <button type="submit" class="btn btn-primary btn-big">再設定メールを送る</button>
+      <button type="button" class="btn btn-quiet" id="btn-forgot-back">ログインに戻る</button>
+    </form>
+
+    <form id="join-code-form" class="stack" hidden>
+      <p class="muted">リーダーから教わった招待コードを入力してください。次に、あなたの登録情報を入れる画面に進みます。</p>
+      <label class="field">
+        <span>招待コード</span>
+        <input type="text" id="join-code" required maxlength="12" autocomplete="off" placeholder="例：A2B4C6">
+      </label>
+      <button type="submit" class="btn btn-primary btn-big">次へ</button>
+    </form>
+
+    <form id="reg-form" class="stack" hidden>
+      <p class="muted" id="reg-context"></p>
+      <label class="field" id="reg-team-wrap" hidden>
+        <span>チーム名</span>
+        <input type="text" id="reg-team-name" maxlength="40" placeholder="例：○○高校 弓道部">
+      </label>
+      <label class="field">
+        <span>メールアドレス（必須）</span>
+        <input type="email" id="reg-email" inputmode="email" autocomplete="email" required placeholder="example@mail.com">
+      </label>
+      <label class="field">
+        <span>ログインID（英数字と _ 、3〜20文字）</span>
+        <input type="text" id="reg-id" autocomplete="username" autocapitalize="none" required maxlength="20" placeholder="例：yuki_01">
+      </label>
+      <label class="field">
+        <span>名前（本名）</span>
+        <input type="text" id="reg-name" autocomplete="name" required maxlength="30" placeholder="名前">
+      </label>
+      <label class="field">
+        <span>学年（任意）</span>
+        <input type="text" id="reg-grade" maxlength="10" placeholder="例：2年">
+      </label>
+      <label class="field">
+        <span>パスワード（6文字以上）</span>
+        <input type="password" id="reg-password" autocomplete="new-password" required>
+      </label>
+      <label class="field">
+        <span>パスワード（確認）</span>
+        <input type="password" id="reg-password2" autocomplete="new-password" required>
+      </label>
+      <button type="submit" class="btn btn-primary btn-big" id="reg-submit">登録する</button>
+      <button type="button" class="btn btn-quiet" id="reg-back" hidden>招待コードを入力し直す</button>
+      <p class="note">メールアドレスは、パスワードを忘れたときに再設定のメールを受け取るために使います。ログインには使いません。</p>
     </form>
     <p id="login-message" class="message" role="status"></p>
   </div>
@@ -257,6 +303,23 @@
         <div id="detail-yasho" class="yasho-view"></div>
         <h3>記録</h3>
         <div id="detail-list"></div>
+        <div id="detail-manage" hidden>
+          <h3>メンバー管理（リーダー）</h3>
+          <label class="field">
+            <span>名前</span>
+            <input type="text" id="detail-edit-name" maxlength="30">
+          </label>
+          <label class="field">
+            <span>学年</span>
+            <input type="text" id="detail-edit-grade" maxlength="10">
+          </label>
+          <div class="shot-sub-buttons">
+            <button type="button" class="btn btn-primary" id="btn-detail-save">名前・学年を保存</button>
+            <button type="button" class="btn btn-danger" id="btn-detail-remove">チームから外す</button>
+          </div>
+          <p id="detail-manage-message" class="message" role="status"></p>
+          <p class="note">IDとパスワードは本人のものなので、ここでは変更できません。パスワードを忘れたメンバーには、ログイン画面から再設定メールを送るよう伝えてください。チームから外しても、その人の過去の記録はチームの合計に残ります。</p>
+        </div>
       </div>
 
       <div class="card">
@@ -278,20 +341,16 @@
 
       <div class="card">
         <h2>ログインIDとパスワード</h2>
-        <p class="note">設定すると、次回からメールリンクを使わず、IDとパスワードだけでログインできます。いまのログインID：<strong id="account-current-id">未設定</strong></p>
+        <p class="note">いまのログインID：<strong id="account-current-id">未設定</strong>（ログインIDは変更できません）<br>登録メールアドレス：<span id="account-email">未登録</span></p>
         <form id="account-form" class="stack">
           <label class="field">
-            <span>ログインID（英数字と _ 、3〜20文字）</span>
-            <input type="text" id="account-id" autocomplete="username" autocapitalize="none" maxlength="20" placeholder="例：yuki_01">
-          </label>
-          <label class="field">
-            <span>パスワード（6文字以上）</span>
+            <span>新しいパスワード（6文字以上）</span>
             <input type="password" id="account-password" autocomplete="new-password" placeholder="新しいパスワード">
           </label>
-          <button type="submit" class="btn btn-primary">保存する</button>
+          <button type="submit" class="btn btn-primary">パスワードを変更する</button>
         </form>
         <p id="account-message" class="message" role="status"></p>
-        <p class="note">IDだけ変えるときは、パスワード欄を空のままにしてください。パスワードを忘れたときは、ログアウトして「メールリンク」で入り直し、ここで設定し直してください。</p>
+        <p class="note">パスワードを忘れたときは、ログアウトして、ログイン画面の「パスワードを忘れた方はこちら」から再設定メールを送ってください。</p>
       </div>
     </div>
   </main>
@@ -327,6 +386,6 @@
   </div>
 </div>
 
-<script type="module" src="app.js?v=20251105-6"></script>
+<script type="module" src="app.js?v=20251105-7"></script>
 </body>
 </html>
