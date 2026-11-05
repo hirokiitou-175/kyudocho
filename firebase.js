@@ -27,7 +27,7 @@ import {
   getDocs,
   serverTimestamp
 } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js";
-import { firebaseConfig } from "./firebase-config.js?v=20251105-3";
+import { firebaseConfig } from "./firebase-config.js?v=20251105-4";
 
 const app = initializeApp(firebaseConfig);
 export const auth = getAuth(app);
@@ -52,6 +52,12 @@ export async function sendLoginLink(email) {
 // 現在の URL がログインリンクかどうか。
 export function isEmailLink(url) {
   return isSignInWithEmailLink(auth, url);
+}
+
+// リンク送信時に保存したメールアドレス（このブラウザに残っている場合のみ）。
+// 別ブラウザ・別アプリでリンクを開くと残っていないので、その場合は null。
+export function savedSignInEmail() {
+  return window.localStorage.getItem(EMAIL_KEY);
 }
 
 // ログインリンクから戻ってきたときのログイン完了処理。

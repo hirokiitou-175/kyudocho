@@ -4,6 +4,7 @@ import {
   auth,
   sendLoginLink,
   isEmailLink,
+  savedSignInEmail,
   completeEmailLink,
   signInWithId,
   claimLoginId,
@@ -22,7 +23,7 @@ import {
   listPracticesByTeam,
   savePractice,
   removePractice
-} from "./firebase.js?v=20251105-3";
+} from "./firebase.js?v=20251105-4";
 
 // ---------------- 状態 ----------------
 const state = {
@@ -264,21 +265,21 @@ async function loadProfileAndTeam() {
 }
 
 // ---------------- 起動 ----------------
-async function boot() {
-  // メールリンクから戻ってきた場合、先にログインを完了させる
-  if (isEmailLink(window.location.href)) {
-    try {
-      await completeEmailLink(window.location.href, () =>
-        window.prompt("確認のため、リンクを送ったメールアドレスを入力してください")
-      );
-      window.history.replaceState({}, document.title, window.location.pathname);
-    } catch (e) {
-      console.error(e);
-      $("login-message").textContent = "ログインに失敗しました。もう一度リンクを送ってください。";
-      showView("view-login");
-      return;
-    }
+// メールリンクを開いたブラウザに、送信時のアドレスが残っていない場合
+// （メールアプリの中で開いた等）に、リンクを引き継ぐための置き場所。
+const PENDING_LINK_KEY = "kyudochoPendingEmailLink";
+
+function linkErrorMessage(e) {
+  if (e && (e.code === "auth/invalid-action-code" || e.code === "auth/expired-action-code")) {
+    return "リンクが無効でした。すでに使われたか、有効期限が切れています。新しいリンクを送って、届いたらすぐ開いてください。";
   }
+  if (e && e.code === "auth/invalid-email") {
+    return "メールアドレスが、リンクを送ったものと違うようです。同じアドレスを入力してください。";
+  }
+  return "ログインに失敗しました。もう一度お試しください。";
+}
+
+function startWatch() {
   watchAuth(async (user) => {
     state.user = user;
     if (user) {
@@ -293,6 +294,37 @@ async function boot() {
     }
     await route();
   });
+}
+
+async function boot() {
+  // メールリンクから戻ってきた場合、先にログインを完了させる
+  if (isEmailLink(window.location.href)) {
+    const linkUrl = window.location.href;
+    if (!savedSignInEmail()) {
+      // アドレスが残っていないブラウザで開かれた。ポップアップではなく、
+      // ログイン画面の中でアドレスを確認してから完了させる。
+      sessionStorage.setItem(PENDING_LINK_KEY, linkUrl);
+      showView("view-login");
+      setLoginTab("mail");
+      $("login-send").textContent = "ログインを完了する";
+      $("login-message").textContent =
+        "リンクを受け取りました。確認のため、リンクを送ったメールアドレスを入力して「ログインを完了する」を押してください。";
+      startWatch();
+      return;
+    }
+    try {
+      await completeEmailLink(linkUrl);
+      window.history.replaceState({}, document.title, window.location.pathname);
+    } catch (e) {
+      console.error(e);
+      showView("view-login");
+      setLoginTab("mail");
+      $("login-message").textContent = linkErrorMessage(e);
+      startWatch();
+      return;
+    }
+  }
+  startWatch();
 }
 
 // ---------------- ログイン ----------------
@@ -331,14 +363,35 @@ $("login-form").addEventListener("submit", async (ev) => {
   const email = $("login-email").value.trim();
   const msg = $("login-message");
   $("login-send").disabled = true;
+  // リンクから戻ってきた直後（アドレス確認待ち）かどうか
+  const pending = sessionStorage.getItem(PENDING_LINK_KEY);
   try {
-    await sendLoginLink(email);
-    msg.textContent = "リンクを送りました。メールを確認して、リンクを開いてください。";
-    msg.classList.add("ok");
+    if (pending) {
+      await completeEmailLink(pending, () => email);
+      sessionStorage.removeItem(PENDING_LINK_KEY);
+      $("login-send").textContent = "リンクを送る";
+      window.history.replaceState({}, document.title, window.location.pathname);
+      msg.textContent = "";
+      // ログイン後の画面遷移は watchAuth → route() が行う
+    } else {
+      await sendLoginLink(email);
+      msg.textContent = "リンクを送りました。メールを確認して、リンクを開いてください。";
+      msg.classList.add("ok");
+    }
   } catch (e) {
     console.error(e);
-    msg.textContent = "送信に失敗しました。アドレスを確認してもう一度お試しください。";
     msg.classList.remove("ok");
+    if (pending) {
+      // アドレス違いのときは入れ直せるようリンクを保持し、それ以外は
+      // リンク自体が無効なので、次は新しいリンクを送れる状態に戻す
+      if (e.code !== "auth/invalid-email") {
+        sessionStorage.removeItem(PENDING_LINK_KEY);
+        $("login-send").textContent = "リンクを送る";
+      }
+      msg.textContent = linkErrorMessage(e);
+    } else {
+      msg.textContent = "送信に失敗しました。アドレスを確認してもう一度お試しください。";
+    }
   } finally {
     $("login-send").disabled = false;
   }
