@@ -27,7 +27,7 @@ import {
   removePractice,
   deletePractices,
   transferPractices
-} from "./firebase.js?v=20251105-22";
+} from "./firebase.js?v=20251105-23";
 
 // ---------------- 状態 ----------------
 const state = {
@@ -1298,18 +1298,14 @@ function trendChartSvg(series, buckets) {
     g += `<text x="${lx}" y="${H - B + 18}" text-anchor="${crowded ? "end" : "middle"}" font-size="11" fill="#6f6a5e"${rotate}>${esc(b.label)}</text>`;
   });
   for (const s of series) {
-    let run = [];
-    const flush = () => {
-      if (run.length > 1) {
-        g += `<path d="${run.map((pt, j) => `${j ? "L" : "M"}${pt[0].toFixed(1)},${pt[1].toFixed(1)}`).join(" ")}" fill="none" stroke="${s.color}" stroke-width="3" stroke-linejoin="round" stroke-linecap="round"/>`;
-      }
-      run = [];
-    };
+    // 記録のない区間（休みなど）があっても、線は途切れずに前後をつなぐ
+    const pts = [];
     s.buckets.forEach((b, i) => {
-      if (b.rate === null) { flush(); return; }
-      run.push([x(i), y(b.rate)]);
+      if (b.rate !== null) pts.push([x(i), y(b.rate)]);
     });
-    flush();
+    if (pts.length > 1) {
+      g += `<path d="${pts.map((pt, j) => `${j ? "L" : "M"}${pt[0].toFixed(1)},${pt[1].toFixed(1)}`).join(" ")}" fill="none" stroke="${s.color}" stroke-width="3" stroke-linejoin="round" stroke-linecap="round"/>`;
+    }
     s.buckets.forEach((b, i) => {
       if (b.rate === null) return;
       g += `<circle cx="${x(i)}" cy="${y(b.rate)}" r="4" fill="${s.color}" stroke="#fff" stroke-width="1.5"><title>${esc(s.member.name)}：${esc(b.label)} ${b.shots}射 ${b.hits}中（${Math.round(b.rate * 100)}%）</title></circle>`;
