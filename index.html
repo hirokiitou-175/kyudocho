@@ -9,7 +9,7 @@
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="icon.svg">
-<link rel="stylesheet" href="styles.css?v=20251105-4">
+<link rel="stylesheet" href="styles.css?v=20251105-5">
 </head>
 <body>
 
@@ -75,6 +75,36 @@
       <button type="submit" class="btn btn-primary btn-big">登録する</button>
     </form>
     <p id="profile-message" class="message" role="status"></p>
+  </div>
+</section>
+
+<!-- 初回設定（名前・ログインID・パスワード）※設定するまで次へ進めない -->
+<section id="view-setup" class="view" hidden>
+  <div class="center-box">
+    <div class="target-mark" aria-hidden="true"></div>
+    <h1 class="app-title">初回設定</h1>
+    <p class="muted">名前・ログインID・パスワードを設定してください。<br>設定が終わるまで、チームの作成や招待コードでの参加には進めません。次回からは、メールリンクなしでIDとパスワードだけでログインできます。</p>
+    <form id="setup-form" class="stack">
+      <label class="field">
+        <span>名前（本名）</span>
+        <input type="text" id="setup-name" autocomplete="name" required maxlength="30" placeholder="名前">
+      </label>
+      <label class="field">
+        <span>学年（任意）</span>
+        <input type="text" id="setup-grade" maxlength="10" placeholder="例：2年">
+      </label>
+      <label class="field">
+        <span>ログインID（英数字と _ 、3〜20文字）</span>
+        <input type="text" id="setup-id" autocomplete="username" autocapitalize="none" required maxlength="20" placeholder="例：yuki_01">
+      </label>
+      <label class="field">
+        <span>パスワード（6文字以上）</span>
+        <input type="password" id="setup-password" autocomplete="new-password">
+      </label>
+      <p class="note" id="setup-password-note"></p>
+      <button type="submit" class="btn btn-primary btn-big">設定して次へ</button>
+    </form>
+    <p id="setup-message" class="message" role="status"></p>
   </div>
 </section>
 
@@ -297,6 +327,6 @@
   </div>
 </div>
 
-<script type="module" src="app.js?v=20251105-4"></script>
+<script type="module" src="app.js?v=20251105-5"></script>
 </body>
 </html>

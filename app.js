@@ -23,7 +23,7 @@ import {
   listPracticesByTeam,
   savePractice,
   removePractice
-} from "./firebase.js?v=20251105-4";
+} from "./firebase.js?v=20251105-5";
 
 // ---------------- 状態 ----------------
 const state = {
@@ -216,13 +216,36 @@ function targetPadSvg(points, clickable) {
 
 // ---------------- 画面の切り替え ----------------
 function showView(id) {
-  for (const v of ["view-loading", "view-login", "view-profile", "view-team-setup", "view-main"]) {
+  for (const v of ["view-loading", "view-login", "view-profile", "view-setup", "view-team-setup", "view-main"]) {
     $(v).hidden = v !== id;
   }
 }
 
+// 初回設定（名前・ログインID・パスワード）が済んでいるか。
+// 済んでいない間は、チーム作成・招待コード入力へ進めない。
+function needsAccountSetup() {
+  if (!state.user) return false;
+  if (!state.profile || !state.profile.name) return true;
+  if (!state.profile.loginId) return true;
+  if (!hasPasswordProvider(state.user)) return true;
+  return false;
+}
+
+function renderSetup() {
+  const p = state.profile;
+  if (p) {
+    if (!$("setup-name").value && p.name) $("setup-name").value = p.name;
+    if (!$("setup-grade").value && p.grade) $("setup-grade").value = p.grade;
+    if (!$("setup-id").value && p.loginId) $("setup-id").value = p.loginId;
+  }
+  $("setup-password-note").textContent = hasPasswordProvider(state.user)
+    ? "パスワードは設定済みです。変えるときだけ入力してください。"
+    : "";
+}
+
 async function route() {
   if (!state.user) { showView("view-login"); return; }
+  if (needsAccountSetup()) { renderSetup(); showView("view-setup"); return; }
   if (!state.profile) { showView("view-profile"); return; }
   if (!state.profile.teamId) {
     $("setup-hello").textContent = state.profile.name || "";
@@ -416,6 +439,63 @@ $("profile-form").addEventListener("submit", async (ev) => {
   } catch (e) {
     console.error(e);
     $("profile-message").textContent = "保存に失敗しました。通信環境を確認してください。";
+  }
+});
+
+// ---------------- 初回設定（名前・ログインID・パスワード） ----------------
+$("setup-form").addEventListener("submit", async (ev) => {
+  ev.preventDefault();
+  const msg = $("setup-message");
+  const name = $("setup-name").value.trim();
+  const grade = $("setup-grade").value.trim();
+  const loginId = $("setup-id").value.trim().toLowerCase();
+  const password = $("setup-password").value;
+  const currentId = state.profile?.loginId || null;
+  const pwAlreadySet = hasPasswordProvider(state.user);
+
+  if (!name) { msg.textContent = "名前を入力してください。"; return; }
+  if (!/^[a-z0-9_]{3,20}$/.test(loginId)) {
+    msg.textContent = "ログインIDは、英小文字・数字・_ の3〜20文字で入力してください。";
+    return;
+  }
+  if (!pwAlreadySet && password.length < 6) {
+    msg.textContent = "パスワードは6文字以上で入力してください。";
+    return;
+  }
+  if (pwAlreadySet && password && password.length < 6) {
+    msg.textContent = "パスワードを変える場合は、6文字以上で入力してください。";
+    return;
+  }
+
+  try {
+    if (loginId !== currentId) {
+      await claimLoginId(loginId, state.user.uid, state.user.email);
+      if (currentId) {
+        try { await releaseLoginId(currentId); } catch (e) { console.error(e); }
+      }
+    }
+    await saveUserProfile(state.user.uid, {
+      name,
+      grade: grade || null,
+      loginId,
+      email: state.user.email || null
+    });
+    if (password) await setAccountPassword(state.user, password);
+    $("setup-password").value = "";
+    msg.textContent = "";
+    await loadProfileAndTeam();
+    await route();
+  } catch (e) {
+    console.error(e);
+    if (e.code === "app/id-taken") {
+      msg.textContent = "そのログインIDは既に使われています。別のIDにしてください。";
+    } else if (e.code === "auth/requires-recent-login") {
+      msg.textContent = "安全のため、一度ログアウトして、メールリンクでログインし直してから設定してください。";
+    } else if (e.code === "auth/operation-not-allowed") {
+      msg.textContent = "パスワードでのログインがまだ有効になっていません。管理者（Firebaseの設定）側の有効化が必要です。";
+    } else {
+      msg.textContent = "保存に失敗しました。通信環境を確認してもう一度お試しください。";
+    }
   }
 });
 
