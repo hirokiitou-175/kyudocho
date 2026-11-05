@@ -1,7 +1,12 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <!-- 弓道帳アイコン：霞的（直径36cm・全日本弓道連盟競技規則の区分）
+       中心から 中白 半径3.6cm／1の黒 幅3.6／2の白 幅3.0／2の黒 幅1.5／3の白 幅3.0／外黒 幅3.3
+       的の半径18cmを196pxに換算して同心円を重ねている -->
   <rect width="512" height="512" rx="96" fill="#faf6ec"/>
-  <circle cx="256" cy="256" r="196" fill="#fffdf7" stroke="#2b2b28" stroke-width="10"/>
-  <circle cx="256" cy="256" r="146" fill="none" stroke="#2b2b28" stroke-width="38"/>
-  <circle cx="256" cy="256" r="92" fill="#fffdf7" stroke="#2b2b28" stroke-width="5"/>
-  <circle cx="256" cy="256" r="34" fill="#c73e2c"/>
+  <circle cx="256" cy="256" r="196" fill="#2b2b28"/>
+  <circle cx="256" cy="256" r="160.1" fill="#fffdf7"/>
+  <circle cx="256" cy="256" r="127.4" fill="#2b2b28"/>
+  <circle cx="256" cy="256" r="111.1" fill="#fffdf7"/>
+  <circle cx="256" cy="256" r="78.4" fill="#2b2b28"/>
+  <circle cx="256" cy="256" r="39.2" fill="#fffdf7"/>
 </svg>

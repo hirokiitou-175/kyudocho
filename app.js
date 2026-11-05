@@ -27,7 +27,7 @@ import {
   savePractice,
   removePractice,
   deletePractices
-} from "./firebase.js?v=20251105-13";
+} from "./firebase.js?v=20251105-14";
 
 // ---------------- 状態 ----------------
 const state = {
@@ -209,12 +209,17 @@ function targetPadSvg(points, clickable) {
     const cy = (110 + pt.y * 100).toFixed(1);
     return `<circle cx="${cx}" cy="${cy}" r="6" fill="#c73e2c" fill-opacity="0.75" stroke="#fff" stroke-width="1.5"/>`;
   }).join("");
+  // 霞的（直径36cm）の区分どおりの同心円：中心から
+  // 中白 半径3.6cm／1の黒 幅3.6／2の白 幅3.0／2の黒 幅1.5／3の白 幅3.0／外黒 幅3.3。
+  // 半径18cmを104pxに換算して円を重ねている。
   return `
   <svg viewBox="0 0 220 220" ${clickable ? 'id="yasho-svg"' : ""} role="img" aria-label="的">
-    <circle cx="110" cy="110" r="104" fill="#fffdf7" stroke="#2b2b28" stroke-width="2.5"/>
-    <circle cx="110" cy="110" r="76" fill="none" stroke="#2b2b28" stroke-width="12"/>
-    <circle cx="110" cy="110" r="46" fill="#fffdf7" stroke="#2b2b28" stroke-width="2"/>
-    <circle cx="110" cy="110" r="10" fill="#2b2b28"/>
+    <circle cx="110" cy="110" r="104" fill="#2b2b28"/>
+    <circle cx="110" cy="110" r="84.9" fill="#fffdf7"/>
+    <circle cx="110" cy="110" r="67.6" fill="#2b2b28"/>
+    <circle cx="110" cy="110" r="58.9" fill="#fffdf7"/>
+    <circle cx="110" cy="110" r="41.6" fill="#2b2b28"/>
+    <circle cx="110" cy="110" r="20.8" fill="#fffdf7"/>
     ${dots}
   </svg>`;
 }
