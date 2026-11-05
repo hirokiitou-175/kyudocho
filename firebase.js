@@ -30,7 +30,7 @@ import {
   getDocs,
   serverTimestamp
 } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js";
-import { firebaseConfig } from "./firebase-config.js?v=20251105-18";
+import { firebaseConfig } from "./firebase-config.js?v=20251105-19";
 
 const app = initializeApp(firebaseConfig);
 export const auth = getAuth(app);
@@ -277,6 +277,21 @@ export async function deletePractices(ids) {
 
 export async function removePractice(practiceId) {
   await deleteDoc(doc(db, "practices", practiceId));
+}
+
+// リーダーがメンバーの記録を別メンバーへ引き継ぐ（記録の持ち主 uid を付け替える。1回400件ずつ）
+export async function transferPractices(fromUid, toUid) {
+  const q = query(collection(db, "practices"), where("uid", "==", fromUid));
+  const snap = await getDocs(q);
+  const docs = snap.docs;
+  for (let i = 0; i < docs.length; i += 400) {
+    const batch = writeBatch(db);
+    for (const d of docs.slice(i, i + 400)) {
+      batch.update(d.ref, { uid: toUid });
+    }
+    await batch.commit();
+  }
+  return docs.length;
 }
 
 // 招待コード（読み間違いしやすい文字を避けた6文字）

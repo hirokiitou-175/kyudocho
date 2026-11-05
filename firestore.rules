@@ -9,7 +9,8 @@ rules_version = '2';
 // - teams はログイン済みなら読み取り可（招待コードでチームを探すために必要。
 //   招待コード自体が参加の鍵になる）。作成は作成者＝リーダーのときのみ、
 //   更新・削除はリーダーのみ。
-// - practices は本人のみ書き込み可。読み取りは同じチームの所属メンバーまで許可する。
+// - practices は本人のみ書き込み可（例外として、リーダーは記録の持ち主の付け替え＝
+//   引き継ぎだけ可、削除は整理のためにリーダーも可）。読み取りは同じチームの所属メンバーまで許可する。
 //   これは「リーダーがメンバーの詳細（1立ごとの記録・メモ・矢所）を見る」ことと、
 //   「一般メンバーがチーム合計を計算する」ことの両立のため。
 //   一般メンバーに他人の詳細を見せない出し分けは、アプリ画面側でも行っている
@@ -57,6 +58,15 @@ service cloud.firestore {
       return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.teamId;
     }
 
+    // リーダーがメンバーの記録を、同じチームの別メンバーへ引き継ぐ更新かどうか
+    // （変えられるのは記録の持ち主 uid だけで、引き継ぎ先も同じチームのメンバーに限る）
+    function leaderTransferPractice() {
+      return resource.data.teamId != null
+        && isLeaderOf(resource.data.teamId)
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['uid'])
+        && get(/databases/$(database)/documents/users/$(request.resource.data.uid)).data.teamId == resource.data.teamId;
+    }
+
     match /users/{uid} {
       allow read: if signedIn()
         && (request.auth.uid == uid
@@ -94,7 +104,7 @@ service cloud.firestore {
       allow create: if signedIn()
         && request.resource.data.uid == request.auth.uid;
       allow update: if signedIn()
-        && resource.data.uid == request.auth.uid;
+        && (resource.data.uid == request.auth.uid || leaderTransferPractice());
       // 削除は本人に加えて、そのチームのリーダーも可
       // （3年より前の記録をまとめて整理するため）
       allow delete: if signedIn()

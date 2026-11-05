@@ -25,8 +25,9 @@ import {
   listPracticesByTeam,
   savePractice,
   removePractice,
-  deletePractices
-} from "./firebase.js?v=20251105-18";
+  deletePractices,
+  transferPractices
+} from "./firebase.js?v=20251105-19";
 
 // ---------------- 状態 ----------------
 const state = {
@@ -1132,6 +1133,17 @@ function renderMemberDetail(uid) {
     $("detail-edit-grade").value = target.grade || "";
     $("detail-manage-message").textContent = "";
     $("detail-manage-message").classList.remove("ok");
+    // 記録の引き継ぎ先の候補（このメンバー以外）
+    const sel = $("detail-transfer-to");
+    sel.innerHTML = "";
+    for (const m of state.members) {
+      if (m.id === uid) continue;
+      const opt = document.createElement("option");
+      opt.value = m.id;
+      opt.textContent = m.grade ? `${m.name || "（名前未設定）"}（${m.grade}）` : (m.name || "（名前未設定）");
+      sel.appendChild(opt);
+    }
+    $("detail-transfer-wrap").hidden = state.members.length <= 1;
   }
 
   $("team-summary-card").hidden = true;
@@ -1166,6 +1178,36 @@ $("btn-detail-save").addEventListener("click", async () => {
     console.error(e);
     msg.textContent = "保存に失敗しました。通信環境を確認してください。";
     msg.classList.remove("ok");
+  }
+});
+
+// リーダーがメンバーの記録を別メンバーへ引き継ぐ
+$("btn-detail-transfer").addEventListener("click", async () => {
+  const fromUid = state.detailUid;
+  const toUid = $("detail-transfer-to").value;
+  const msg = $("detail-manage-message");
+  if (!fromUid || !toUid) return;
+  const count = state.teamPractices.filter((p) => p.uid === fromUid).length;
+  if (!count) {
+    msg.textContent = "引き継ぐ記録がありません。";
+    msg.classList.remove("ok");
+    return;
+  }
+  if (!window.confirm(`${memberName(fromUid)} さんの記録 ${count}件を、${memberName(toUid)} さんへ引き継ぎます。よろしいですか？`)) return;
+  $("btn-detail-transfer").disabled = true;
+  try {
+    const moved = await transferPractices(fromUid, toUid);
+    await refreshData();
+    renderMemberDetail(fromUid);
+    const msg2 = $("detail-manage-message");
+    msg2.textContent = `${moved}件の記録を引き継ぎました。`;
+    msg2.classList.add("ok");
+  } catch (e) {
+    console.error(e);
+    msg.textContent = "引き継ぎに失敗しました。通信環境を確認してください。";
+    msg.classList.remove("ok");
+  } finally {
+    $("btn-detail-transfer").disabled = false;
   }
 });
 

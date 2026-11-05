@@ -9,7 +9,7 @@
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="icon.svg">
-<link rel="stylesheet" href="styles.css?v=20251105-18">
+<link rel="stylesheet" href="styles.css?v=20251105-19">
 </head>
 <body>
 
@@ -304,7 +304,16 @@
             <button type="button" class="btn btn-danger" id="btn-detail-remove">チームから外す</button>
           </div>
           <p id="detail-manage-message" class="message" role="status"></p>
-          <p class="note">IDとパスワードは本人のものなので、ここでは変更できません。パスワードを忘れたメンバーには、新しいログインIDで登録し直して招待コードで参加してもらい、そのあとで古い方のアカウントをここからチームから外してください。記録は古いアカウント側に残り、新しいアカウントには引き継がれません（チームの合計には残ります）。</p>
+          <div id="detail-transfer-wrap">
+            <label class="field">
+              <span>記録の引き継ぎ先</span>
+              <select id="detail-transfer-to"></select>
+            </label>
+            <div class="shot-sub-buttons">
+              <button type="button" class="btn" id="btn-detail-transfer">このメンバーへ記録を引き継ぐ</button>
+            </div>
+          </div>
+          <p class="note">IDとパスワードは本人のものなので、ここでは変更できません。パスワードを忘れたメンバーには、新しいログインIDで登録し直して招待コードで参加してもらい、新しいアカウントへ記録を引き継いでから、古い方のアカウントをここからチームから外してください。</p>
         </div>
       </div>
 
@@ -379,6 +388,6 @@
   </div>
 </div>
 
-<script type="module" src="app.js?v=20251105-18"></script>
+<script type="module" src="app.js?v=20251105-19"></script>
 </body>
 </html>
