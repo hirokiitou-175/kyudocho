@@ -27,7 +27,7 @@ import {
   removePractice,
   deletePractices,
   transferPractices
-} from "./firebase.js?v=20251105-19";
+} from "./firebase.js?v=20251105-20";
 
 // ---------------- 状態 ----------------
 const state = {
@@ -1002,6 +1002,8 @@ function renderTeam() {
 
   const wrap = $("team-members");
   wrap.innerHTML = "";
+  $("team-members-heading").hidden = !isLeader;
+  $("team-members-help").hidden = !isLeader;
   $("team-member-note").hidden = isLeader;
 
   if (isLeader) {
