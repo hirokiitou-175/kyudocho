@@ -23,7 +23,7 @@ import {
   listPracticesByTeam,
   savePractice,
   removePractice
-} from "./firebase.js?v=20251105-5";
+} from "./firebase.js?v=20251105-6";
 
 // ---------------- 状態 ----------------
 const state = {
@@ -292,6 +292,17 @@ async function loadProfileAndTeam() {
 // （メールアプリの中で開いた等）に、リンクを引き継ぐための置き場所。
 const PENDING_LINK_KEY = "kyudochoPendingEmailLink";
 
+// リンク送信に失敗したときの理由表示
+function sendErrorMessage(e) {
+  const code = e && e.code ? e.code : "";
+  if (code === "auth/operation-not-allowed") return "メールリンクが有効になっていません。Firebase側の設定が必要です。";
+  if (code === "auth/unauthorized-continue-uri" || code === "auth/invalid-continue-uri" || code === "auth/missing-continue-uri") return "このページのURLが、Firebaseの承認済みドメインに入っていません。";
+  if (code === "auth/too-many-requests" || code === "auth/quota-exceeded") return "送信の上限に達しました。しばらく時間をおいてからお試しください。";
+  if (code === "auth/invalid-email") return "メールアドレスの形式を確認してください。";
+  if (code === "auth/network-request-failed") return "通信に失敗しました。電波の良い場所で、もう一度お試しください。";
+  return "送信に失敗しました。アドレスを確認してもう一度お試しください。" + (code ? `（${code}）` : "");
+}
+
 function linkErrorMessage(e) {
   if (e && (e.code === "auth/invalid-action-code" || e.code === "auth/expired-action-code")) {
     return "リンクが無効でした。すでに使われたか、有効期限が切れています。新しいリンクを送って、届いたらすぐ開いてください。";
@@ -413,7 +424,7 @@ $("login-form").addEventListener("submit", async (ev) => {
       }
       msg.textContent = linkErrorMessage(e);
     } else {
-      msg.textContent = "送信に失敗しました。アドレスを確認してもう一度お試しください。";
+      msg.textContent = sendErrorMessage(e);
     }
   } finally {
     $("login-send").disabled = false;
