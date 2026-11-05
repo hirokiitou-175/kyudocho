@@ -27,7 +27,7 @@ import {
   savePractice,
   removePractice,
   deletePractices
-} from "./firebase.js?v=20251105-9";
+} from "./firebase.js?v=20251105-10";
 
 // ---------------- 状態 ----------------
 const state = {
@@ -1109,7 +1109,10 @@ function renderMemberDetail(uid) {
   const range = state.teamRange;
   const list = state.teamPractices.filter((p) => p.uid === uid && inRange(p.date, range));
   const st = sumStats(list);
-  $("detail-name").textContent = `${memberName(uid)} さんの記録`;
+  const detailMember = state.members.find((x) => x.id === uid);
+  $("detail-name").textContent = detailMember?.grade
+    ? `${memberName(uid)}（${detailMember.grade}）さんの記録`
+    : `${memberName(uid)} さんの記録`;
   $("detail-summary").textContent =
     `${range === "month" ? "今月" : "通算"}：${st.shots}射 ${st.hits}中（的中率 ${rateText(st.shots, st.hits)}）`;
 
