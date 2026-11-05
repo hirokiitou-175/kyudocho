@@ -9,7 +9,7 @@
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="icon.svg">
-<link rel="stylesheet" href="styles.css?v=20251105-8">
+<link rel="stylesheet" href="styles.css?v=20251105-9">
 </head>
 <body>
 
@@ -339,6 +339,14 @@
         <p id="csv-message" class="message" role="status"></p>
       </div>
 
+      <div class="card" id="cleanup-card" hidden>
+        <h2>記録の整理</h2>
+        <p class="note">記録は、記録の日から3年たったものが整理の対象になります。残したい記録は、先にCSVで書き出して保管してください。削除した記録は元に戻せません。</p>
+        <p id="cleanup-count" class="team-total">―</p>
+        <button type="button" class="btn btn-danger" id="btn-cleanup">3年より前の記録を削除する</button>
+        <p id="cleanup-message" class="message" role="status"></p>
+      </div>
+
       <div class="card">
         <h2>ログインIDとパスワード</h2>
         <p class="note">いまのログインID：<strong id="account-current-id">未設定</strong>（ログインIDは変更できません）<br>登録メールアドレス：<span id="account-email">未登録</span></p>
@@ -386,6 +394,6 @@
   </div>
 </div>
 
-<script type="module" src="app.js?v=20251105-8"></script>
+<script type="module" src="app.js?v=20251105-9"></script>
 </body>
 </html>

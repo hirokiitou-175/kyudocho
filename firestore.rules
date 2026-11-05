@@ -91,8 +91,12 @@ service cloud.firestore {
             || resource.data.teamId == myTeamId());
       allow create: if signedIn()
         && request.resource.data.uid == request.auth.uid;
-      allow update, delete: if signedIn()
+      allow update: if signedIn()
         && resource.data.uid == request.auth.uid;
+      // 削除は本人に加えて、そのチームのリーダーも可
+      // （3年より前の記録をまとめて整理するため）
+      allow delete: if signedIn()
+        && (resource.data.uid == request.auth.uid || isLeaderOf(resource.data.teamId));
     }
   }
 }

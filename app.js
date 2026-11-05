@@ -25,8 +25,9 @@ import {
   listPracticesByUser,
   listPracticesByTeam,
   savePractice,
-  removePractice
-} from "./firebase.js?v=20251105-8";
+  removePractice,
+  deletePractices
+} from "./firebase.js?v=20251105-9";
 
 // ---------------- 状態 ----------------
 const state = {
@@ -1060,7 +1061,47 @@ function renderTeam() {
     $("member-detail-card").hidden = true;
     $("team-summary-card").hidden = false;
   }
+
+  // 記録の整理（リーダーのみ）：3年より前の記録の件数を出す
+  $("cleanup-card").hidden = !isLeader;
+  if (isLeader) {
+    const old = oldPractices();
+    $("cleanup-count").textContent = old.length
+      ? `3年より前の記録が ${old.length} 件あります`
+      : "3年より前の記録はありません";
+    $("btn-cleanup").disabled = old.length === 0;
+  }
 }
+
+// 記録の日から3年以上たった記録（整理の対象）
+function oldPractices() {
+  const d = new Date();
+  d.setFullYear(d.getFullYear() - 3);
+  const cutoff = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  return state.teamPractices.filter((p) => p.date && p.date <= cutoff);
+}
+
+$("btn-cleanup").addEventListener("click", async () => {
+  const targets = oldPractices();
+  if (!targets.length) return;
+  if (!window.confirm(`3年より前の記録 ${targets.length} 件を削除します。削除した記録は元に戻せません。よろしいですか？`)) return;
+  const btn = $("btn-cleanup");
+  const msg = $("cleanup-message");
+  btn.disabled = true;
+  try {
+    await deletePractices(targets.map((p) => p.id));
+    await refreshData();
+    renderTeam();
+    const msg2 = $("cleanup-message");
+    msg2.textContent = `${targets.length} 件の記録を削除しました。`;
+    msg2.classList.add("ok");
+  } catch (e) {
+    console.error(e);
+    msg.textContent = "削除に失敗しました。通信環境を確認してもう一度お試しください。";
+    msg.classList.remove("ok");
+    btn.disabled = false;
+  }
+});
 
 function renderMemberDetail(uid) {
   if (state.profile.role !== "leader") return;

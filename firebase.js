@@ -24,13 +24,14 @@ import {
   addDoc,
   updateDoc,
   deleteDoc,
+  writeBatch,
   collection,
   query,
   where,
   getDocs,
   serverTimestamp
 } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js";
-import { firebaseConfig } from "./firebase-config.js?v=20251105-8";
+import { firebaseConfig } from "./firebase-config.js?v=20251105-9";
 
 const app = initializeApp(firebaseConfig);
 export const auth = getAuth(app);
@@ -256,6 +257,17 @@ export async function savePractice(practiceId, data) {
     updatedAt: serverTimestamp()
   });
   return ref.id;
+}
+
+// 複数の記録をまとめて削除する（古い記録の整理用。1回400件ずつ）
+export async function deletePractices(ids) {
+  for (let i = 0; i < ids.length; i += 400) {
+    const batch = writeBatch(db);
+    for (const id of ids.slice(i, i + 400)) {
+      batch.delete(doc(db, "practices", id));
+    }
+    await batch.commit();
+  }
 }
 
 export async function removePractice(practiceId) {
