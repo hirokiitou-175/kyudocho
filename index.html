@@ -27,16 +27,34 @@
   <div class="center-box">
     <div class="target-mark" aria-hidden="true"></div>
     <h1 class="app-title">弓道帳</h1>
-    <p class="muted">メールアドレスにログイン用リンクを送ります。<br>パスワードは要りません。</p>
-    <form id="login-form" class="stack">
+    <div class="mode-switch" role="group" aria-label="ログイン方法の切り替え">
+      <button type="button" id="login-tab-id" class="active">IDでログイン</button>
+      <button type="button" id="login-tab-mail">メールリンク</button>
+    </div>
+
+    <form id="login-id-form" class="stack">
+      <label class="field">
+        <span>ログインID</span>
+        <input type="text" id="login-id" autocomplete="username" autocapitalize="none" required placeholder="例：yuki_01">
+      </label>
+      <label class="field">
+        <span>パスワード</span>
+        <input type="password" id="login-password" autocomplete="current-password" required>
+      </label>
+      <button type="submit" class="btn btn-primary btn-big" id="login-id-send">ログイン</button>
+      <p class="note">ログインIDとパスワードは、初回ログインのあとに「チーム」タブ下の「ログインIDとパスワード」で設定できます。まだ設定していない人は「メールリンク」から入ってください。</p>
+    </form>
+
+    <form id="login-form" class="stack" hidden>
+      <p class="muted">メールアドレスにログイン用リンクを送ります。<br>初回の登録と、パスワードを忘れたとき用です。</p>
       <label class="field">
         <span>メールアドレス</span>
         <input type="email" id="login-email" inputmode="email" autocomplete="email" required placeholder="example@mail.com">
       </label>
       <button type="submit" class="btn btn-primary btn-big" id="login-send">リンクを送る</button>
+      <p class="note">届いたメール内のリンクを、この端末のブラウザで開いてください。</p>
     </form>
     <p id="login-message" class="message" role="status"></p>
-    <p class="note">届いたメール内のリンクを、この端末のブラウザで開いてください。</p>
   </div>
 </section>
 
@@ -226,6 +244,24 @@
           <button type="button" class="btn btn-primary" id="btn-csv">CSVを出す</button>
         </div>
         <p id="csv-message" class="message" role="status"></p>
+      </div>
+
+      <div class="card">
+        <h2>ログインIDとパスワード</h2>
+        <p class="note">設定すると、次回からメールリンクを使わず、IDとパスワードだけでログインできます。いまのログインID：<strong id="account-current-id">未設定</strong></p>
+        <form id="account-form" class="stack">
+          <label class="field">
+            <span>ログインID（英数字と _ 、3〜20文字）</span>
+            <input type="text" id="account-id" autocomplete="username" autocapitalize="none" maxlength="20" placeholder="例：yuki_01">
+          </label>
+          <label class="field">
+            <span>パスワード（6文字以上）</span>
+            <input type="password" id="account-password" autocomplete="new-password" placeholder="新しいパスワード">
+          </label>
+          <button type="submit" class="btn btn-primary">保存する</button>
+        </form>
+        <p id="account-message" class="message" role="status"></p>
+        <p class="note">IDだけ変えるときは、パスワード欄を空のままにしてください。パスワードを忘れたときは、ログアウトして「メールリンク」で入り直し、ここで設定し直してください。</p>
       </div>
     </div>
   </main>

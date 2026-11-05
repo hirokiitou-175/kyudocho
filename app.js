@@ -5,6 +5,11 @@ import {
   sendLoginLink,
   isEmailLink,
   completeEmailLink,
+  signInWithId,
+  claimLoginId,
+  releaseLoginId,
+  setAccountPassword,
+  hasPasswordProvider,
   watchAuth,
   logout,
   getUserProfile,
@@ -291,6 +296,36 @@ async function boot() {
 }
 
 // ---------------- ログイン ----------------
+// ログイン方法の切り替え（ID／メールリンク）
+function setLoginTab(which) {
+  $("login-tab-id").classList.toggle("active", which === "id");
+  $("login-tab-mail").classList.toggle("active", which === "mail");
+  $("login-id-form").hidden = which !== "id";
+  $("login-form").hidden = which !== "mail";
+  $("login-message").textContent = "";
+}
+$("login-tab-id").addEventListener("click", () => setLoginTab("id"));
+$("login-tab-mail").addEventListener("click", () => setLoginTab("mail"));
+
+$("login-id-form").addEventListener("submit", async (ev) => {
+  ev.preventDefault();
+  const loginId = $("login-id").value.trim().toLowerCase();
+  const password = $("login-password").value;
+  const msg = $("login-message");
+  $("login-id-send").disabled = true;
+  try {
+    await signInWithId(loginId, password);
+    msg.textContent = "";
+    // ログイン後の画面遷移は watchAuth → route() が行う
+  } catch (e) {
+    console.error(e);
+    msg.textContent = "ログインできませんでした。IDとパスワードを確認してください。";
+    msg.classList.remove("ok");
+  } finally {
+    $("login-id-send").disabled = false;
+  }
+});
+
 $("login-form").addEventListener("submit", async (ev) => {
   ev.preventDefault();
   const email = $("login-email").value.trim();
@@ -744,6 +779,7 @@ function memberName(uid) {
 }
 
 function renderTeam() {
+  renderAccount();
   if (!state.team) return;
   const isLeader = state.profile.role === "leader";
   $("team-title").textContent = state.team.name;
@@ -844,6 +880,68 @@ $("btn-detail-back").addEventListener("click", () => {
   state.detailUid = null;
   $("member-detail-card").hidden = true;
   $("team-summary-card").hidden = false;
+});
+
+// ---------------- ログインIDとパスワードの設定 ----------------
+function renderAccount() {
+  const cur = state.profile?.loginId || null;
+  $("account-current-id").textContent = cur || "未設定";
+  const idInput = $("account-id");
+  if (document.activeElement !== idInput && !idInput.value) {
+    idInput.placeholder = cur ? `いまは ${cur}（変えるときだけ入力）` : "例：yuki_01";
+  }
+}
+
+$("account-form").addEventListener("submit", async (ev) => {
+  ev.preventDefault();
+  const msg = $("account-message");
+  const newId = $("account-id").value.trim().toLowerCase();
+  const password = $("account-password").value;
+  const currentId = state.profile?.loginId || null;
+  try {
+    if (!newId && !password) {
+      msg.textContent = "ログインIDかパスワードのどちらかを入力してください。";
+      return;
+    }
+    if (newId) {
+      if (!/^[a-z0-9_]{3,20}$/.test(newId)) {
+        msg.textContent = "ログインIDは、英小文字・数字・_ の3〜20文字で入力してください。";
+        return;
+      }
+      if (newId !== currentId) {
+        await claimLoginId(newId, state.user.uid, state.user.email);
+        if (currentId) {
+          try { await releaseLoginId(currentId); } catch (e) { console.error(e); }
+        }
+        await saveUserProfile(state.user.uid, { loginId: newId });
+        state.profile = { ...state.profile, loginId: newId };
+      }
+    }
+    if (password) {
+      if (password.length < 6) {
+        msg.textContent = "パスワードは6文字以上で入力してください。";
+        return;
+      }
+      await setAccountPassword(state.user, password);
+    }
+    $("account-id").value = "";
+    $("account-password").value = "";
+    renderAccount();
+    msg.textContent = "保存しました。次回からIDとパスワードでログインできます。";
+    msg.classList.add("ok");
+  } catch (e) {
+    console.error(e);
+    msg.classList.remove("ok");
+    if (e.code === "app/id-taken") {
+      msg.textContent = "そのログインIDは既に使われています。別のIDにしてください。";
+    } else if (e.code === "auth/requires-recent-login") {
+      msg.textContent = "安全のため、一度ログアウトして、メールリンクでログインし直してから設定してください。";
+    } else if (e.code === "auth/operation-not-allowed") {
+      msg.textContent = "パスワードでのログインがまだ有効になっていません。管理者（Firebaseの設定）側の有効化が必要です。";
+    } else {
+      msg.textContent = "保存に失敗しました。通信環境を確認してもう一度お試しください。";
+    }
+  }
 });
 
 // ---------------- CSV出力 ----------------

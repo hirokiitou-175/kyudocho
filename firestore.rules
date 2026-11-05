@@ -34,6 +34,20 @@ service cloud.firestore {
       allow delete: if false;
     }
 
+    // ログインID（英数字）→ アカウントの対応表。
+    // ログイン前の画面で ID からメールアドレスを引く必要があるため、
+    // 1件だけの読み取り（get）はログイン前でも許可する。一覧表示（list）は不可。
+    // 作成は本人のみ（自分の uid と、認証に登録されたメールアドレスだけ書ける）。
+    match /usernames/{loginId} {
+      allow get: if true;
+      allow list: if false;
+      allow create: if signedIn()
+        && request.resource.data.uid == request.auth.uid
+        && request.resource.data.email == request.auth.token.email;
+      allow update: if false;
+      allow delete: if signedIn() && resource.data.uid == request.auth.uid;
+    }
+
     match /teams/{teamId} {
       allow read: if signedIn();
       allow create: if signedIn() && request.resource.data.leaderUid == request.auth.uid;

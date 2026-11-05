@@ -7,6 +7,10 @@ import {
   sendSignInLinkToEmail,
   isSignInWithEmailLink,
   signInWithEmailLink,
+  signInWithEmailAndPassword,
+  EmailAuthProvider,
+  linkWithCredential,
+  updatePassword,
   signOut
 } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-auth.js";
 import {
@@ -63,6 +67,64 @@ export async function completeEmailLink(url, askEmail) {
 
 export function watchAuth(callback) {
   return onAuthStateChanged(auth, callback);
+}
+
+// ---------- ログインID＋パスワード ----------
+// パスワード自体は Firebase Auth が保管する（アカウントのメールアドレスに紐づく）。
+// ログインID（英数字）は usernames/{loginId} に { uid, email } を置き、
+// ログイン時に ID → メールアドレス → パスワードでログイン、の順に解決する。
+
+export async function findEmailByLoginId(loginId) {
+  const snap = await getDoc(doc(db, "usernames", loginId));
+  return snap.exists() ? snap.data().email : null;
+}
+
+export async function signInWithId(loginId, password) {
+  const email = await findEmailByLoginId(loginId);
+  if (!email) {
+    const e = new Error("そのログインIDは見つかりませんでした。");
+    e.code = "app/id-not-found";
+    throw e;
+  }
+  const result = await signInWithEmailAndPassword(auth, email, password);
+  return result.user;
+}
+
+// そのログインIDが既に使われているか（自分のものなら false）
+export async function isLoginIdTaken(loginId, myUid) {
+  const snap = await getDoc(doc(db, "usernames", loginId));
+  return snap.exists() && snap.data().uid !== myUid;
+}
+
+// ログインIDを自分のものとして登録する。他人が使用中なら例外。
+export async function claimLoginId(loginId, uid, email) {
+  const ref = doc(db, "usernames", loginId);
+  const snap = await getDoc(ref);
+  if (snap.exists()) {
+    if (snap.data().uid === uid) return;
+    const e = new Error("そのログインIDは既に使われています。");
+    e.code = "app/id-taken";
+    throw e;
+  }
+  await setDoc(ref, { uid, email, createdAt: serverTimestamp() });
+}
+
+export async function releaseLoginId(loginId) {
+  await deleteDoc(doc(db, "usernames", loginId));
+}
+
+export function hasPasswordProvider(user) {
+  return (user?.providerData || []).some((p) => p.providerId === "password");
+}
+
+// アカウントにパスワードを設定する（未設定なら追加、設定済みなら変更）。
+export async function setAccountPassword(user, password) {
+  if (hasPasswordProvider(user)) {
+    await updatePassword(user, password);
+  } else {
+    const cred = EmailAuthProvider.credential(user.email, password);
+    await linkWithCredential(user, cred);
+  }
 }
 
 export function logout() {
