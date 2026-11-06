@@ -7,6 +7,11 @@
 
 # JS / CSS は更新がすぐ反映されるよう、キャッシュせず毎回確認させる
 [[headers]]
+  for = "/"
+  [headers.values]
+    Cache-Control = "public, max-age=0, must-revalidate"
+
+[[headers]]
   for = "/*.js"
   [headers.values]
     Cache-Control = "public, max-age=0, must-revalidate"

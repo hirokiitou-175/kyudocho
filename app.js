@@ -27,7 +27,7 @@ import {
   removePractice,
   deletePractices,
   transferPractices
-} from "./firebase.js?v=20251105-27";
+} from "./firebase.js?v=20251105-28";
 
 // ---------------- 状態 ----------------
 const state = {
@@ -222,21 +222,23 @@ function targetGraphSvg(shots, hits) {
 // 矢所の的（入力用・表示用で共用）。points: [{x,y}]（中心=0、右・下が正、-1〜1）
 function targetPadSvg(points, clickable) {
   const dots = (points || []).map((pt) => {
-    const cx = (110 + pt.x * 100).toFixed(1);
-    const cy = (110 + pt.y * 100).toFixed(1);
-    return `<circle cx="${cx}" cy="${cy}" r="6" fill="#c73e2c" fill-opacity="0.75" stroke="#fff" stroke-width="1.5"/>`;
+    const cx = (110 + pt.x * 46).toFixed(1);
+    const cy = (110 + pt.y * 46).toFixed(1);
+    return `<circle cx="${cx}" cy="${cy}" r="5" fill="#c73e2c" fill-opacity="0.75" stroke="#fff" stroke-width="1.5"/>`;
   }).join("");
   // 霞的（直径36cm）の区分どおりの同心円：中心から
   // 中白 半径3.6cm／1の黒 幅3.6／2の白 幅3.0／2の黒 幅1.5／3の白 幅3.0／外黒 幅3.3。
-  // 半径18cmを104pxに換算して円を重ねている。
+  // 的から外れた矢も記録できるよう、的は引きで表示する
+  // （半径18cmを47.8pxに換算。データ座標は従来どおり的の半径=1.04）。
   return `
   <svg viewBox="0 0 220 220" ${clickable ? 'id="yasho-svg"' : ""} role="img" aria-label="的">
-    <circle cx="110" cy="110" r="104" fill="#2b2b28"/>
-    <circle cx="110" cy="110" r="84.9" fill="#fffdf7"/>
-    <circle cx="110" cy="110" r="67.6" fill="#2b2b28"/>
-    <circle cx="110" cy="110" r="58.9" fill="#fffdf7"/>
-    <circle cx="110" cy="110" r="41.6" fill="#2b2b28"/>
-    <circle cx="110" cy="110" r="20.8" fill="#fffdf7"/>
+    <rect x="2" y="2" width="216" height="216" rx="12" fill="#f3eee1"/>
+    <circle cx="110" cy="110" r="47.8" fill="#2b2b28"/>
+    <circle cx="110" cy="110" r="39.1" fill="#fffdf7"/>
+    <circle cx="110" cy="110" r="31.1" fill="#2b2b28"/>
+    <circle cx="110" cy="110" r="27.1" fill="#fffdf7"/>
+    <circle cx="110" cy="110" r="19.1" fill="#2b2b28"/>
+    <circle cx="110" cy="110" r="9.6" fill="#fffdf7"/>
     ${dots}
   </svg>`;
 }
@@ -307,6 +309,26 @@ async function refreshData() {
   state.members = members;
   state.team = team;
 }
+
+// アプリに戻ってきたら（1分以上離れていた場合）、データを読み直して表示を最新にする。
+// これがないと、開きっぱなしの画面では他の人の保存が反映されない。
+let lastHiddenAt = 0;
+document.addEventListener("visibilitychange", async () => {
+  if (document.hidden) {
+    lastHiddenAt = Date.now();
+    return;
+  }
+  if (!lastHiddenAt || Date.now() - lastHiddenAt < 60 * 1000) return;
+  lastHiddenAt = 0;
+  if (!state.user || !state.profile?.teamId || state.registering) return;
+  try {
+    await refreshData();
+    renderHome();
+    renderTeam();
+  } catch (e) {
+    console.error(e);
+  }
+});
 
 // ログイン後に users / teams を読み込む
 async function loadProfileAndTeam() {
@@ -789,8 +811,8 @@ function yashoHeatmapSvg(points) {
   const CELL = 220 / GRID;
   const counts = new Array(GRID * GRID).fill(0);
   for (const p of points) {
-    const gx = Math.max(0, Math.min(GRID - 1, Math.floor((110 + p.x * 100) / CELL)));
-    const gy = Math.max(0, Math.min(GRID - 1, Math.floor((110 + p.y * 100) / CELL)));
+    const gx = Math.max(0, Math.min(GRID - 1, Math.floor((110 + p.x * 46) / CELL)));
+    const gy = Math.max(0, Math.min(GRID - 1, Math.floor((110 + p.y * 46) / CELL)));
     counts[gy * GRID + gx] += 1;
   }
   // 3×3でぼかして、なめらかな濃淡にする
@@ -824,18 +846,17 @@ function yashoHeatmapSvg(points) {
   }
   const mx = points.reduce((a, p) => a + p.x, 0) / points.length;
   const my = points.reduce((a, p) => a + p.y, 0) / points.length;
-  const cx = 110 + mx * 100;
-  const cy = 110 + my * 100;
-  const cross = `M ${(cx - 9).toFixed(1)} ${cy.toFixed(1)} H ${(cx + 9).toFixed(1)} M ${cx.toFixed(1)} ${(cy - 9).toFixed(1)} V ${(cy + 9).toFixed(1)}`;
-  const rings = [84.9, 67.6, 58.9, 41.6, 20.8]
+  const cx = 110 + mx * 46;
+  const cy = 110 + my * 46;
+  const cross = `M ${(cx - 7).toFixed(1)} ${cy.toFixed(1)} H ${(cx + 7).toFixed(1)} M ${cx.toFixed(1)} ${(cy - 7).toFixed(1)} V ${(cy + 7).toFixed(1)}`;
+  const rings = [39.1, 31.1, 27.1, 19.1, 9.6]
     .map((r) => `<circle cx="110" cy="110" r="${r}" fill="none" stroke="#2b2b28" stroke-width="1.2"/>`)
     .join("");
   return `<svg viewBox="0 0 220 220" role="img" aria-label="矢所のヒートマップ">
-    <defs><clipPath id="heat-clip"><circle cx="110" cy="110" r="104"/></clipPath></defs>
-    <circle cx="110" cy="110" r="104" fill="#fffdf7"/>
-    <g clip-path="url(#heat-clip)">${cells}</g>
+    <circle cx="110" cy="110" r="47.8" fill="#fffdf7"/>
+    <g>${cells}</g>
     ${rings}
-    <circle cx="110" cy="110" r="104" fill="none" stroke="#2b2b28" stroke-width="2.5"/>
+    <circle cx="110" cy="110" r="47.8" fill="none" stroke="#2b2b28" stroke-width="2.5"/>
     <path d="${cross}" stroke="#fff" stroke-width="5" stroke-linecap="round"/>
     <path d="${cross}" stroke="#2b2b28" stroke-width="2.6" stroke-linecap="round"/>
   </svg>`;
@@ -1087,13 +1108,14 @@ function renderYashoPad() {
     svg.addEventListener("click", (ev) => {
       if (points.length >= cap) return;
       const rect = svg.getBoundingClientRect();
-      // 画面上のタップ位置 → 的の中心からの相対座標（-1〜1、右・下が正）
+      // 画面上のタップ位置 → 的の中心からの相対座標（右・下が正、的の半径=1.04）
       const px = (ev.clientX - rect.left) / rect.width;   // 0〜1
       const py = (ev.clientY - rect.top) / rect.height;   // 0〜1
-      let x = (px * 220 - 110) / 100;
-      let y = (py * 220 - 110) / 100;
-      x = Math.max(-1, Math.min(1, Math.round(x * 100) / 100));
-      y = Math.max(-1, Math.min(1, Math.round(y * 100) / 100));
+      // 的は引き表示（半径=46px換算）。的の外も ±2.3 まで記録できる
+      let x = (px * 220 - 110) / 46;
+      let y = (py * 220 - 110) / 46;
+      x = Math.max(-2.3, Math.min(2.3, Math.round(x * 100) / 100));
+      y = Math.max(-2.3, Math.min(2.3, Math.round(y * 100) / 100));
       points.push({ x, y });
       renderYashoPad();
       renderEditor();
@@ -1640,14 +1662,14 @@ function analysisYashoSvg(series) {
   const centers = [];
   for (const s of series) {
     for (const pt of s.points) {
-      dots.push(`<circle cx="${(110 + pt.x * 100).toFixed(1)}" cy="${(110 + pt.y * 100).toFixed(1)}" r="4.2" fill="${s.color}" fill-opacity="0.65" stroke="#fff" stroke-width="1"/>`);
+      dots.push(`<circle cx="${(110 + pt.x * 46).toFixed(1)}" cy="${(110 + pt.y * 46).toFixed(1)}" r="4.2" fill="${s.color}" fill-opacity="0.65" stroke="#fff" stroke-width="1"/>`);
     }
     if (s.points.length) {
       const mx = s.points.reduce((a, p) => a + p.x, 0) / s.points.length;
       const my = s.points.reduce((a, p) => a + p.y, 0) / s.points.length;
-      const cx = 110 + mx * 100;
-      const cy = 110 + my * 100;
-      const cross = `M ${(cx - 9).toFixed(1)} ${cy.toFixed(1)} H ${(cx + 9).toFixed(1)} M ${cx.toFixed(1)} ${(cy - 9).toFixed(1)} V ${(cy + 9).toFixed(1)}`;
+      const cx = 110 + mx * 46;
+      const cy = 110 + my * 46;
+      const cross = `M ${(cx - 7).toFixed(1)} ${cy.toFixed(1)} H ${(cx + 7).toFixed(1)} M ${cx.toFixed(1)} ${(cy - 7).toFixed(1)} V ${(cy + 7).toFixed(1)}`;
       centers.push(
         `<path d="${cross}" stroke="#fff" stroke-width="5" stroke-linecap="round"/>` +
         `<path d="${cross}" stroke="${s.color}" stroke-width="2.6" stroke-linecap="round"/>`
@@ -1655,12 +1677,12 @@ function analysisYashoSvg(series) {
     }
   }
   return `<svg viewBox="0 0 220 220" role="img" aria-label="矢所の集中">
-    <circle cx="110" cy="110" r="104" fill="#2b2b28"/>
-    <circle cx="110" cy="110" r="84.9" fill="#fffdf7"/>
-    <circle cx="110" cy="110" r="67.6" fill="#2b2b28"/>
-    <circle cx="110" cy="110" r="58.9" fill="#fffdf7"/>
-    <circle cx="110" cy="110" r="41.6" fill="#2b2b28"/>
-    <circle cx="110" cy="110" r="20.8" fill="#fffdf7"/>
+    <circle cx="110" cy="110" r="47.8" fill="#2b2b28"/>
+    <circle cx="110" cy="110" r="39.1" fill="#fffdf7"/>
+    <circle cx="110" cy="110" r="31.1" fill="#2b2b28"/>
+    <circle cx="110" cy="110" r="27.1" fill="#fffdf7"/>
+    <circle cx="110" cy="110" r="19.1" fill="#2b2b28"/>
+    <circle cx="110" cy="110" r="9.6" fill="#fffdf7"/>
     ${dots.join("")}${centers.join("")}
   </svg>`;
 }
