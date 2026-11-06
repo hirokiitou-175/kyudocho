@@ -27,7 +27,7 @@ import {
   removePractice,
   deletePractices,
   transferPractices
-} from "./firebase.js?v=20251105-25";
+} from "./firebase.js?v=20251105-26";
 
 // ---------------- 状態 ----------------
 const state = {
@@ -38,6 +38,8 @@ const state = {
   myPractices: [],     // 自分の practices（日付の新しい順）
   teamPractices: [],   // チーム全員の practices
   homeRange: "total",  // today | month | total
+  homeTrendUnit: "day", // ホームの推移グラフの単位 day | week
+  homeTrendRange: "30days", // ホームの推移グラフの期間 30days | month | total
   teamRange: "month",  // month | total
   detailUid: null,     // メンバー詳細で表示中の uid
   pendingTransfer: null, // 引き継ぎ最終確認の内容 { fromUid, toUid, count }
@@ -691,30 +693,151 @@ function renderHome() {
   $("home-tachi").textContent = `${st.tachi.shots}射 ${st.tachi.hits}中（${rateText(st.tachi.shots, st.tachi.hits)}）`;
   $("home-shakomi").textContent = `${st.shakomi.shots}射 ${st.shakomi.hits}中（${rateText(st.shakomi.shots, st.shakomi.hits)}）`;
 
-  const box = $("home-recent");
-  if (!state.myPractices.length) {
-    box.innerHTML = '<p class="empty">まだ記録がありません。「記録」から入力してみてください。</p>';
-    return;
+  renderHomeTrend();
+}
+
+// ホームの推移グラフの期間（開始日・終了日）
+function homeTrendWindow() {
+  const today = todayStr();
+  if (state.homeTrendRange === "month") {
+    return { start: `${monthStr(0)}-01`, end: today };
   }
-  box.innerHTML = "";
-  for (const p of state.myPractices.slice(0, 10)) {
-    const stp = practiceStats(p);
-    const btn = document.createElement("button");
-    btn.type = "button";
-    btn.className = "practice-item";
-    const lines = groupLines(p).map((g) =>
-      `<span class="sub">${esc(g.label)}</span> <span class="shots-line">${marksHtml(g.marks)}</span>`
-    ).join("<br>");
-    btn.innerHTML = `
-      <span class="date">${esc(p.date)}</span>${p.incomplete ? '<span class="badge">未完了</span>' : ""}
-      <br>${lines || '<span class="sub">記録なし</span>'}
-      <br><span class="sub">${stp.shots}射 ${stp.hits}中（${rateText(stp.shots, stp.hits)}）${p.memo ? " ／ " + esc(p.memo) : ""}</span>`;
-    btn.addEventListener("click", () => {
-      loadIntoEditor(p);
-      switchTab("record");
-    });
-    box.appendChild(btn);
+  if (state.homeTrendRange === "total") {
+    const dates = state.myPractices.map((p) => p.date).filter(Boolean).sort();
+    let start = dates.length ? dates[0] : addDaysStr(today, -29);
+    // 日ごとのときは最大で過去1年分まで
+    if (state.homeTrendUnit === "day" && daysBetween(start, today) > 365) {
+      start = addDaysStr(today, -365);
+    }
+    return { start, end: today };
   }
+  return { start: addDaysStr(today, -29), end: today };
+}
+
+// ホーム：自分の的中率推移グラフ＋矢所ヒートマップ
+function renderHomeTrend() {
+  if (!state.user) return;
+  const { start, end } = homeTrendWindow();
+  const unit = state.homeTrendUnit;
+  const buckets = analysisBuckets(start, end, unit);
+  const list = state.myPractices.filter((p) => p.date >= start && p.date <= end);
+  const byKey = new Map(buckets.map((b) => [b.key, { ...b, shots: 0, hits: 0 }]));
+  for (const p of list) {
+    const key = unit === "day" ? p.date : weekStartStr(p.date);
+    const b = byKey.get(key);
+    if (!b) continue;
+    const st = practiceStats(p);
+    b.shots += st.shots;
+    b.hits += st.hits;
+  }
+  const agg = [...byKey.values()].map((b) => ({
+    ...b,
+    rate: b.shots ? b.hits / b.shots : null
+  }));
+  const total = sumStats(list);
+  const me = state.members.find((m) => m.id === state.user.uid) ||
+    { name: state.profile?.name || "自分" };
+  const points = collectYashoPoints(list);
+  const series = [{
+    member: me,
+    uid: state.user.uid,
+    color: ANALYSIS_COLORS[0],
+    list,
+    buckets: agg,
+    total,
+    points
+  }];
+  $("home-trend-summary").textContent =
+    `${start} ～ ${end}：${total.shots}射 ${total.hits}中（${rateText(total.shots, total.hits)}）／立 ${rateText(total.tachi.shots, total.tachi.hits)}・射込み ${rateText(total.shakomi.shots, total.shakomi.hits)}`;
+  const hasData = agg.some((b) => b.rate !== null);
+  $("home-trend").innerHTML = hasData
+    ? trendChartSvg(series, buckets)
+    : '<p class="empty">この期間の記録はまだありません。「記録」から入力してみてください。</p>';
+
+  // 矢所がある期間だけヒートマップを出す
+  $("home-yasho-card").hidden = !points.length;
+  if (points.length) {
+    $("home-yasho").innerHTML = yashoHeatmapSvg(points);
+    const mt = yashoMetrics(points);
+    $("home-yasho-summary").textContent = mt
+      ? `矢所 ${mt.count}点：多い場所は${mt.area}（${mt.areaPct}%）、中心からの平均 ${mt.meanDistCm}cm、重心は${mt.centroid}です。`
+      : "";
+  }
+}
+
+document.querySelectorAll("[data-htunit]").forEach((btn) => {
+  btn.addEventListener("click", () => {
+    state.homeTrendUnit = btn.dataset.htunit;
+    document.querySelectorAll("[data-htunit]").forEach((b) =>
+      b.classList.toggle("active", b === btn));
+    renderHomeTrend();
+  });
+});
+document.querySelectorAll("[data-htrange]").forEach((btn) => {
+  btn.addEventListener("click", () => {
+    state.homeTrendRange = btn.dataset.htrange;
+    document.querySelectorAll("[data-htrange]").forEach((b) =>
+      b.classList.toggle("active", b === btn));
+    renderHomeTrend();
+  });
+});
+
+// 矢所のヒートマップ（霞的の上に、集まり具合を色の濃さで重ねる）
+function yashoHeatmapSvg(points) {
+  const GRID = 20;
+  const CELL = 220 / GRID;
+  const counts = new Array(GRID * GRID).fill(0);
+  for (const p of points) {
+    const gx = Math.max(0, Math.min(GRID - 1, Math.floor((110 + p.x * 100) / CELL)));
+    const gy = Math.max(0, Math.min(GRID - 1, Math.floor((110 + p.y * 100) / CELL)));
+    counts[gy * GRID + gx] += 1;
+  }
+  // 3×3でぼかして、なめらかな濃淡にする
+  const smooth = new Array(GRID * GRID).fill(0);
+  for (let gy = 0; gy < GRID; gy++) {
+    for (let gx = 0; gx < GRID; gx++) {
+      let sum = 0;
+      for (let dy = -1; dy <= 1; dy++) {
+        for (let dx = -1; dx <= 1; dx++) {
+          const nx = gx + dx;
+          const ny = gy + dy;
+          if (nx < 0 || ny < 0 || nx >= GRID || ny >= GRID) continue;
+          const w = dx === 0 && dy === 0 ? 4 : dx === 0 || dy === 0 ? 2 : 1;
+          sum += counts[ny * GRID + nx] * w;
+        }
+      }
+      smooth[gy * GRID + gx] = sum / 16;
+    }
+  }
+  const max = Math.max(...smooth, 0.0001);
+  let cells = "";
+  for (let gy = 0; gy < GRID; gy++) {
+    for (let gx = 0; gx < GRID; gx++) {
+      const v = smooth[gy * GRID + gx] / max;
+      if (v < 0.05) continue;
+      // 黄（薄い）→ 赤（濃い）へ補間する
+      const green = Math.round(215 - 160 * v);
+      const alpha = (0.22 + 0.68 * v).toFixed(2);
+      cells += `<rect x="${gx * CELL}" y="${gy * CELL}" width="${CELL}" height="${CELL}" fill="rgb(255, ${green}, 0)" fill-opacity="${alpha}"/>`;
+    }
+  }
+  const mx = points.reduce((a, p) => a + p.x, 0) / points.length;
+  const my = points.reduce((a, p) => a + p.y, 0) / points.length;
+  const cx = 110 + mx * 100;
+  const cy = 110 + my * 100;
+  const cross = `M ${(cx - 9).toFixed(1)} ${cy.toFixed(1)} H ${(cx + 9).toFixed(1)} M ${cx.toFixed(1)} ${(cy - 9).toFixed(1)} V ${(cy + 9).toFixed(1)}`;
+  const rings = [84.9, 67.6, 58.9, 41.6, 20.8]
+    .map((r) => `<circle cx="110" cy="110" r="${r}" fill="none" stroke="#2b2b28" stroke-width="1.2"/>`)
+    .join("");
+  return `<svg viewBox="0 0 220 220" role="img" aria-label="矢所のヒートマップ">
+    <defs><clipPath id="heat-clip"><circle cx="110" cy="110" r="104"/></clipPath></defs>
+    <circle cx="110" cy="110" r="104" fill="#fffdf7"/>
+    <g clip-path="url(#heat-clip)">${cells}</g>
+    ${rings}
+    <circle cx="110" cy="110" r="104" fill="none" stroke="#2b2b28" stroke-width="2.5"/>
+    <path d="${cross}" stroke="#fff" stroke-width="5" stroke-linecap="round"/>
+    <path d="${cross}" stroke="#2b2b28" stroke-width="2.6" stroke-linecap="round"/>
+  </svg>`;
 }
 
 // ---------------- 記録エディタ ----------------

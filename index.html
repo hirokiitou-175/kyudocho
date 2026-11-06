@@ -9,7 +9,7 @@
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="icon.svg">
-<link rel="stylesheet" href="styles.css?v=20251105-25">
+<link rel="stylesheet" href="styles.css?v=20251105-26">
 </head>
 <body>
 
@@ -218,8 +218,27 @@
       </div>
 
       <div class="card">
-        <h2>最近の記録</h2>
-        <div id="home-recent"></div>
+        <div class="rate-head">
+          <h2>的中率の推移</h2>
+          <div class="range-switch" role="group" aria-label="推移の集計単位">
+            <button type="button" data-htunit="day" class="active">日ごと</button>
+            <button type="button" data-htunit="week">週ごと</button>
+          </div>
+        </div>
+        <div class="range-switch" role="group" aria-label="推移の期間" style="margin-top:0.5rem">
+          <button type="button" data-htrange="30days" class="active">過去30日</button>
+          <button type="button" data-htrange="month">今月</button>
+          <button type="button" data-htrange="total">全期間</button>
+        </div>
+        <p class="note" id="home-trend-summary"></p>
+        <div id="home-trend" class="analysis-chart"></div>
+      </div>
+
+      <div class="card" id="home-yasho-card" hidden>
+        <h2>矢所の集まり（ヒートマップ）</h2>
+        <p class="note">上のグラフと同じ期間の矢所です。色が濃い場所ほど、矢所が集まっています（＋印は重心）。</p>
+        <div id="home-yasho" class="yasho-view analysis-yasho"></div>
+        <p class="note" id="home-yasho-summary"></p>
       </div>
     </div>
 
@@ -458,6 +477,6 @@
   </div>
 </div>
 
-<script type="module" src="app.js?v=20251105-25"></script>
+<script type="module" src="app.js?v=20251105-26"></script>
 </body>
 </html>
