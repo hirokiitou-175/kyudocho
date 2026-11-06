@@ -17,6 +17,8 @@ import {
 } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-auth.js";
 import {
   getFirestore,
+  initializeFirestore,
+  persistentLocalCache,
   doc,
   getDoc,
   setDoc,
@@ -30,11 +32,20 @@ import {
   getDocs,
   serverTimestamp
 } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js";
-import { firebaseConfig } from "./firebase-config.js?v=20251105-23";
+import { firebaseConfig } from "./firebase-config.js?v=20251105-24";
 
 const app = initializeApp(firebaseConfig);
 export const auth = getAuth(app);
-export const db = getFirestore(app);
+// オフライン保存：接続が一時的に切れても、書き込みは端末内に保管され、
+// つながり直したときに自動で送信される（学校のWi-Fiなどで保存だけ失敗する対策）。
+// 端末側の保存が使えない環境では、通常の接続方式に切り替える。
+let dbInstance;
+try {
+  dbInstance = initializeFirestore(app, { localCache: persistentLocalCache() });
+} catch (e) {
+  dbInstance = getFirestore(app);
+}
+export const db = dbInstance;
 
 // ---------- メールリンク ログイン ----------
 

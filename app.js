@@ -27,7 +27,7 @@ import {
   removePractice,
   deletePractices,
   transferPractices
-} from "./firebase.js?v=20251105-23";
+} from "./firebase.js?v=20251105-24";
 
 // ---------------- 状態 ----------------
 const state = {
@@ -849,6 +849,24 @@ $("btn-undo").addEventListener("click", () => {
   if (w.shots.length) { w.shots.pop(); trimYashoGroups(editor.mode); renderEditor(); }
 });
 
+// 保存・削除のあとに全件を読み直すと、その読み込みが失敗しただけで
+// 「保存に失敗しました」と出てしまう。手元のデータに直接反映して、
+// 保存できたかどうかだけで判定する。
+function upsertLocalPractice(saved) {
+  const apply = (arr) => {
+    const next = arr.filter((p) => p.id !== saved.id);
+    next.push(saved);
+    next.sort((a, b) => (a.date < b.date ? 1 : -1));
+    return next;
+  };
+  state.myPractices = apply(state.myPractices);
+  state.teamPractices = apply(state.teamPractices);
+}
+function removeLocalPractice(id) {
+  state.myPractices = state.myPractices.filter((p) => p.id !== id);
+  state.teamPractices = state.teamPractices.filter((p) => p.id !== id);
+}
+
 $("btn-save").addEventListener("click", async () => {
   const entries = editorEntries();
   const msg = $("record-message");
@@ -867,13 +885,13 @@ $("btn-save").addEventListener("click", async () => {
   };
   try {
     editor.practiceId = await savePractice(editor.practiceId, data);
-    await refreshData();
+    upsertLocalPractice({ id: editor.practiceId, ...data });
     renderHome();
     showSummary(data);
     msg.textContent = "";
   } catch (e) {
     console.error(e);
-    msg.textContent = "保存に失敗しました。通信環境を確認してください。";
+    msg.textContent = `保存に失敗しました。もう一度試してください。（目印：${e?.code || "不明なエラー"}）`;
   }
 });
 
@@ -882,12 +900,12 @@ $("btn-delete").addEventListener("click", async () => {
   if (!window.confirm("この日の記録を削除します。よろしいですか？")) return;
   try {
     await removePractice(editor.practiceId);
-    await refreshData();
+    removeLocalPractice(editor.practiceId);
     resetEditor(editor.date);
     renderHome();
   } catch (e) {
     console.error(e);
-    $("record-message").textContent = "削除に失敗しました。";
+    $("record-message").textContent = `削除に失敗しました。（目印：${e?.code || "不明なエラー"}）`;
   }
 });
 
