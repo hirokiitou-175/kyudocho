@@ -30,9 +30,10 @@ import {
   query,
   where,
   getDocs,
+  onSnapshot,
   serverTimestamp
 } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js";
-import { firebaseConfig } from "./firebase-config.js?v=20251105-28";
+import { firebaseConfig } from "./firebase-config.js?v=20251105-29";
 
 const app = initializeApp(firebaseConfig);
 export const auth = getAuth(app);
@@ -259,20 +260,43 @@ function expireAtFor(dateStr) {
   return d;
 }
 
-export async function savePractice(practiceId, data) {
+// 書き込みの完了を待つ方針（電波の悪い場所向け）：
+// サーバー到着の確認は最大で数秒だけ待ち、間に合わなければ「端末に保存済み（送信待ち）」として返す。
+// 端末内のキューに入った書き込みは、接続が戻ったときに自動で送信される。
+// 明らかな失敗（権限エラーなど、すぐに返ってくるもの）はそのまま throw する。
+export function settleWrite(promise, ms = 6000) {
+  return new Promise((resolve, reject) => {
+    let done = false;
+    const timer = setTimeout(() => {
+      if (done) return;
+      done = true;
+      promise.catch((e) => console.error("送信待ちの書き込みが最終的に失敗しました:", e));
+      resolve("queued");
+    }, ms);
+    promise.then(
+      () => { if (!done) { done = true; clearTimeout(timer); resolve("ok"); } },
+      (e) => { if (!done) { done = true; clearTimeout(timer); reject(e); } }
+    );
+  });
+}
+
+// 保存は { id, settled } を返す。id は書き込み開始の時点で決まる。
+// settled は "ok"（サーバー到着を確認）か "queued"（端末に保存済み・送信待ち）で解決する。
+export function savePractice(practiceId, data) {
   const expireAt = data && data.date ? expireAtFor(data.date) : null;
   const extra = expireAt ? { expireAt } : {};
   if (practiceId) {
-    await updateDoc(doc(db, "practices", practiceId), { ...data, ...extra, updatedAt: serverTimestamp() });
-    return practiceId;
+    const settled = settleWrite(updateDoc(doc(db, "practices", practiceId), { ...data, ...extra, updatedAt: serverTimestamp() }));
+    return { id: practiceId, settled };
   }
-  const ref = await addDoc(collection(db, "practices"), {
+  const ref = doc(collection(db, "practices"));
+  const settled = settleWrite(setDoc(ref, {
     ...data,
     ...extra,
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp()
-  });
-  return ref.id;
+  }));
+  return { id: ref.id, settled };
 }
 
 // 複数の記録をまとめて削除する（古い記録の整理用。1回400件ずつ）
@@ -286,8 +310,17 @@ export async function deletePractices(ids) {
   }
 }
 
-export async function removePractice(practiceId) {
-  await deleteDoc(doc(db, "practices", practiceId));
+export function removePractice(practiceId) {
+  return settleWrite(deleteDoc(doc(db, "practices", practiceId)));
+}
+
+// 自分の記録に「サーバー未到着の書き込み」があるかを監視する。
+// callback(true) = 送信待ちあり。戻り値は監視を止める関数。
+export function watchMyPendingWrites(uid, callback) {
+  const q = query(collection(db, "practices"), where("uid", "==", uid));
+  return onSnapshot(q, { includeMetadataChanges: true }, (snap) => {
+    callback(snap.metadata.hasPendingWrites);
+  }, (e) => console.error(e));
 }
 
 // リーダーがメンバーの記録を別メンバーへ引き継ぐ（記録の持ち主 uid を付け替える。1回400件ずつ）

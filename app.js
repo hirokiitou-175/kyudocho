@@ -26,8 +26,9 @@ import {
   savePractice,
   removePractice,
   deletePractices,
-  transferPractices
-} from "./firebase.js?v=20251105-28";
+  transferPractices,
+  watchMyPendingWrites
+} from "./firebase.js?v=20251105-29";
 
 // ---------------- 状態 ----------------
 const state = {
@@ -284,6 +285,7 @@ async function route() {
   showView("view-main");
   $("header-sub").textContent =
     `${state.team ? state.team.name : ""} ／ ${state.profile.name}${state.profile.grade ? "（" + state.profile.grade + "）" : ""}${state.profile.role === "leader" ? "・リーダー" : ""}`;
+  startPendingWatch();
   await refreshData();
   renderHome();
   // 記録タブの日付欄が未設定なら、今日の記録（あれば）を読み込んでおく
@@ -351,9 +353,30 @@ function startWatch() {
     } else {
       state.profile = null;
       state.team = null;
+      stopPendingWatch();
     }
     await route();
   });
+}
+
+// 送信待ち（サーバー未到着）の自分の書き込みがある間、ヘッダーに案内を出す
+let pendingUnsub = null;
+let pendingUid = null;
+function startPendingWatch() {
+  if (!state.user) return;
+  if (pendingUnsub && pendingUid === state.user.uid) return;
+  stopPendingWatch();
+  pendingUid = state.user.uid;
+  pendingUnsub = watchMyPendingWrites(state.user.uid, (pending) => {
+    $("sync-note").hidden = !pending;
+  });
+}
+function stopPendingWatch() {
+  if (pendingUnsub) pendingUnsub();
+  pendingUnsub = null;
+  pendingUid = null;
+  const el = $("sync-note");
+  if (el) el.hidden = true;
 }
 
 // ダブルタップ（ダブルクリック）で画面が拡大しないようにする保険。
@@ -1029,30 +1052,42 @@ $("btn-save").addEventListener("click", async () => {
     memo: editor.memo,
     incomplete: editorIncomplete()
   };
-  try {
-    editor.practiceId = await savePractice(editor.practiceId, data);
-    upsertLocalPractice({ id: editor.practiceId, ...data });
-    renderHome();
-    showSummary(data);
-    msg.textContent = "";
-  } catch (e) {
+  // まず端末側へ保存し、その場で「保存できた」として扱う（電波が悪くても待たせない）。
+  // サーバー到着の確認は裏側で続け、届いていなければ案内を出す。
+  const saved = savePractice(editor.practiceId, data);
+  editor.practiceId = saved.id;
+  upsertLocalPractice({ id: saved.id, ...data });
+  renderHome();
+  showSummary(data);
+  msg.textContent = "";
+  saved.settled.then((result) => {
+    if (result === "queued") {
+      msg.textContent = "端末に保存しました。通信がつながると自動で送られます。";
+    }
+  }).catch((e) => {
     console.error(e);
+    removeLocalPractice(saved.id);
+    renderHome();
+    $("summary-panel").hidden = true;
     msg.textContent = `保存に失敗しました。もう一度試してください。（目印：${e?.code || "不明なエラー"}）`;
-  }
+  });
 });
 
 $("btn-delete").addEventListener("click", async () => {
   if (!editor.practiceId) return;
   if (!window.confirm("この日の記録を削除します。よろしいですか？")) return;
-  try {
-    await removePractice(editor.practiceId);
-    removeLocalPractice(editor.practiceId);
-    resetEditor(editor.date);
-    renderHome();
-  } catch (e) {
+  const settled = removePractice(editor.practiceId);
+  removeLocalPractice(editor.practiceId);
+  resetEditor(editor.date);
+  renderHome();
+  settled.then((result) => {
+    if (result === "queued") {
+      $("record-message").textContent = "端末で削除しました。通信がつながると反映されます。";
+    }
+  }).catch((e) => {
     console.error(e);
     $("record-message").textContent = `削除に失敗しました。（目印：${e?.code || "不明なエラー"}）`;
-  }
+  });
 });
 
 function showSummary(data) {

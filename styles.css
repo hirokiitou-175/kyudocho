@@ -125,6 +125,12 @@ h3 { font-size: 1rem; margin: 1rem 0 0.4rem; }
   background: var(--bg);
   position: sticky; top: 0; z-index: 5;
 }
+.sync-note {
+  margin: 0; padding: 0.45rem 0.9rem;
+  background: #fdf3d7; color: #6b5310;
+  font-size: 0.85rem; text-align: center;
+  border-bottom: 1px solid var(--line);
+}
 .header-text { flex: 1; min-width: 0; }
 .header-title { margin: 0; font-size: 1.15rem; }
 .header-sub { margin: 0; font-size: 0.78rem; color: var(--ink-soft); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
