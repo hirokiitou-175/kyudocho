@@ -27,7 +27,7 @@ import {
   removePractice,
   deletePractices,
   transferPractices
-} from "./firebase.js?v=20251105-24";
+} from "./firebase.js?v=20251105-25";
 
 // ---------------- 状態 ----------------
 const state = {
@@ -42,6 +42,7 @@ const state = {
   detailUid: null,     // メンバー詳細で表示中の uid
   pendingTransfer: null, // 引き継ぎ最終確認の内容 { fromUid, toUid, count }
   analysisOpen: false, // 分析シートを表示中か
+  analysisPersonal: false, // 分析シートを「自分の記録だけ」で表示中か（生徒用）
   analysisStart: "",   // 分析シートの期間（開始日）
   analysisEnd: "",     // 分析シートの期間（終了日）
   analysisUnit: "day", // 分析シートの集計単位 day | week
@@ -1024,6 +1025,8 @@ function renderTeam() {
   const st = sumStats(list);
   $("team-total").textContent =
     `${range === "month" ? "今月" : "通算"}：${st.shots}射 ${st.hits}中（的中率 ${rateText(st.shots, st.hits)}）`;
+  $("team-total-breakdown").textContent =
+    `立：${st.tachi.shots}射 ${st.tachi.hits}中（${rateText(st.tachi.shots, st.tachi.hits)}）／射込み：${st.shakomi.shots}射 ${st.shakomi.hits}中（${rateText(st.shakomi.shots, st.shakomi.hits)}）`;
 
   const wrap = $("team-members");
   wrap.innerHTML = "";
@@ -1043,7 +1046,8 @@ function renderTeam() {
       b.className = "member-row";
       b.innerHTML = `
         <span><span class="m-name">${esc(r.member.name)}</span>
-        <span class="m-sub">${r.member.grade ? esc(r.member.grade) + " ／ " : ""}${r.member.id === state.user.uid ? "自分" : ""}</span></span>
+        <span class="m-sub">${r.member.grade ? esc(r.member.grade) + " ／ " : ""}${r.member.id === state.user.uid ? "自分" : ""}</span><br>
+        <span class="m-sub">立 ${rateText(r.st.tachi.shots, r.st.tachi.hits)} ／ 射込み ${rateText(r.st.shakomi.shots, r.st.shakomi.hits)}</span></span>
         <span>${r.st.shots}射 ${r.st.hits}中（${rateText(r.st.shots, r.st.hits)}）</span>`;
       b.addEventListener("click", () => renderMemberDetail(r.member.id));
       wrap.appendChild(b);
@@ -1052,7 +1056,8 @@ function renderTeam() {
   }
   // 一般メンバーには合計だけ（他人の詳細は出さない）
   $("btn-open-analysis").hidden = !isLeader;
-  if (state.analysisOpen && isLeader) {
+  $("btn-open-my-analysis").hidden = isLeader;
+  if (state.analysisOpen && (isLeader || state.analysisPersonal)) {
     $("member-detail-card").hidden = true;
     $("team-summary-card").hidden = true;
     $("analysis-card").hidden = false;
@@ -1141,6 +1146,12 @@ function initAnalysis() {
   if (!state.analysisEnd) state.analysisEnd = today;
   $("analysis-start").value = state.analysisStart;
   $("analysis-end").value = state.analysisEnd;
+  if (state.analysisPersonal) {
+    // 生徒用：比べるのは自分だけ
+    state.analysisSelected = [state.user.uid];
+    state.analysisInit = true;
+    return;
+  }
   if (!state.analysisInit) {
     const students = state.members.filter((m) => m.id !== state.user.uid);
     state.analysisSelected = (students.length ? students : state.members)
@@ -1154,9 +1165,25 @@ function initAnalysis() {
 
 $("btn-open-analysis").addEventListener("click", () => {
   if (state.profile?.role !== "leader") return;
+  state.analysisPersonal = false;
   state.analysisOpen = true;
   state.detailUid = null;
   initAnalysis();
+  $("analysis-title").textContent = "分析シート";
+  $("analysis-note").textContent = "期間とメンバーを選んで、的中率の推移と矢所の集中を見ます（リーダー用）。";
+  $("team-summary-card").hidden = true;
+  $("member-detail-card").hidden = true;
+  $("analysis-card").hidden = false;
+  renderAnalysis();
+});
+$("btn-open-my-analysis").addEventListener("click", () => {
+  if (!state.user) return;
+  state.analysisPersonal = true;
+  state.analysisOpen = true;
+  state.detailUid = null;
+  initAnalysis();
+  $("analysis-title").textContent = "自分の分析";
+  $("analysis-note").textContent = "自分の記録だけを表示します。期間と単位を選んで、的中率の推移と矢所の集中を見ます。";
   $("team-summary-card").hidden = true;
   $("member-detail-card").hidden = true;
   $("analysis-card").hidden = false;
@@ -1213,6 +1240,14 @@ document.querySelectorAll("[data-aperiod]").forEach((btn) => {
 function renderAnalysisMembers() {
   const wrap = $("analysis-members");
   wrap.innerHTML = "";
+  if (state.analysisPersonal) {
+    // 生徒用ではメンバー選択を出さない
+    wrap.hidden = true;
+    $("analysis-members-heading").hidden = true;
+    return;
+  }
+  wrap.hidden = false;
+  $("analysis-members-heading").hidden = false;
   const selectedIndex = new Map(state.analysisSelected.map((id, i) => [id, i]));
   for (const m of state.members) {
     const idx = selectedIndex.get(m.id);
@@ -1364,6 +1399,8 @@ function analysisTrendTable(series) {
       <td>${s.total.shots}射</td>
       <td>${s.total.hits}中</td>
       <td>${rateText(s.total.shots, s.total.hits)}</td>
+      <td>${rateText(s.total.tachi.shots, s.total.tachi.hits)}</td>
+      <td>${rateText(s.total.shakomi.shots, s.total.shakomi.hits)}</td>
       <td>${v.max != null ? v.max + "%" : "―"}</td>
       <td>${v.min != null ? v.min + "%" : "―"}</td>
       <td>${v.range != null ? v.range + "ポイント" : "―"}</td>
@@ -1372,7 +1409,7 @@ function analysisTrendTable(series) {
     </tr>`;
   }).join("");
   return `<div class="analysis-table-wrap"><table class="analysis-table">
-    <thead><tr><th>メンバー</th><th>射数</th><th>的中</th><th>的中率</th><th>最高</th><th>最低</th><th>変動幅</th><th>ばらつき</th><th>波の目安</th></tr></thead>
+    <thead><tr><th>メンバー</th><th>射数</th><th>的中</th><th>的中率</th><th>立</th><th>射込み</th><th>最高</th><th>最低</th><th>変動幅</th><th>ばらつき</th><th>波の目安</th></tr></thead>
     <tbody>${rows}</tbody></table></div>`;
 }
 
@@ -1488,7 +1525,7 @@ function analysisYashoTable(series) {
 }
 
 function renderAnalysis() {
-  if (state.profile?.role !== "leader") return;
+  if (state.profile?.role !== "leader" && !state.analysisPersonal) return;
   const msg = $("analysis-message");
   renderAnalysisMembers();
   const start = state.analysisStart;
@@ -1562,6 +1599,8 @@ function renderMemberDetail(uid) {
     : `${memberName(uid)} さんの記録`;
   $("detail-summary").textContent =
     `${range === "month" ? "今月" : "通算"}：${st.shots}射 ${st.hits}中（的中率 ${rateText(st.shots, st.hits)}）`;
+  $("detail-breakdown").textContent =
+    `立：${st.tachi.shots}射 ${st.tachi.hits}中（${rateText(st.tachi.shots, st.tachi.hits)}）／射込み：${st.shakomi.shots}射 ${st.shakomi.hits}中（${rateText(st.shakomi.shots, st.shakomi.hits)}）`;
 
   // 矢所の散布図（期間内の全記録ぶん。○×は区別せず全部の点）
   const points = [];

@@ -9,7 +9,7 @@
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="icon.svg">
-<link rel="stylesheet" href="styles.css?v=20251105-24">
+<link rel="stylesheet" href="styles.css?v=20251105-25">
 </head>
 <body>
 
@@ -277,17 +277,20 @@
           <button type="button" data-trange="total">通算</button>
         </div>
         <p id="team-total" class="team-total">―</p>
+        <p class="note" id="team-total-breakdown"></p>
         <h3 id="team-members-heading" hidden>メンバー一覧</h3>
         <p class="note" id="team-members-help" hidden>メンバーをタップすると、詳しい記録が開きます。</p>
         <div id="team-members"></div>
         <p class="note" id="team-member-note" hidden>メンバー同士の詳しい記録は、リーダーだけが見られます。</p>
+        <button type="button" class="btn btn-primary btn-big" id="btn-open-my-analysis" hidden>自分の的中率推移を見る</button>
         <button type="button" class="btn btn-primary btn-big" id="btn-open-analysis" hidden>分析シートを開く</button>
       </div>
 
       <div class="card" id="member-detail-card" hidden>
-        <button type="button" class="btn btn-quiet" id="btn-detail-back">← メンバー一覧に戻る</button>
+        <button type="button" class="btn" id="btn-detail-back">← メンバー一覧に戻る</button>
         <h2 id="detail-name">メンバー詳細</h2>
         <p id="detail-summary" class="team-total">―</p>
+        <p class="note" id="detail-breakdown"></p>
         <h3>矢所</h3>
         <div id="detail-yasho" class="yasho-view"></div>
         <h3>記録</h3>
@@ -321,9 +324,9 @@
       </div>
 
       <div class="card" id="analysis-card" hidden>
-        <button type="button" class="btn btn-quiet" id="btn-analysis-back">← チーム合計に戻る</button>
-        <h2>分析シート</h2>
-        <p class="note">期間とメンバーを選んで、的中率の推移と矢所の集中を見ます（リーダー用）。</p>
+        <button type="button" class="btn" id="btn-analysis-back">← チーム合計に戻る</button>
+        <h2 id="analysis-title">分析シート</h2>
+        <p class="note" id="analysis-note">期間とメンバーを選んで、的中率の推移と矢所の集中を見ます（リーダー用）。</p>
 
         <div class="analysis-controls">
           <label class="field">
@@ -349,7 +352,7 @@
           <button type="button" class="btn" data-aperiod="total">全期間</button>
         </div>
 
-        <h3>比べるメンバー（最大6人）</h3>
+        <h3 id="analysis-members-heading">比べるメンバー（最大6人）</h3>
         <div id="analysis-members" class="analysis-members"></div>
         <p id="analysis-message" class="message" role="status"></p>
 
@@ -455,6 +458,6 @@
   </div>
 </div>
 
-<script type="module" src="app.js?v=20251105-24"></script>
+<script type="module" src="app.js?v=20251105-25"></script>
 </body>
 </html>
