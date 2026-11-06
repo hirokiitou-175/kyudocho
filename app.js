@@ -27,7 +27,7 @@ import {
   removePractice,
   deletePractices,
   transferPractices
-} from "./firebase.js?v=20251105-26";
+} from "./firebase.js?v=20251105-27";
 
 // ---------------- 状態 ----------------
 const state = {
@@ -41,6 +41,7 @@ const state = {
   homeTrendUnit: "day", // ホームの推移グラフの単位 day | week
   homeTrendRange: "30days", // ホームの推移グラフの期間 30days | month | total
   teamRange: "month",  // month | total
+  teamTrendUnit: "day", // チーム推移グラフの単位 day | week | month
   detailUid: null,     // メンバー詳細で表示中の uid
   pendingTransfer: null, // 引き継ぎ最終確認の内容 { fromUid, toUid, count }
   analysisOpen: false, // 分析シートを表示中か
@@ -723,7 +724,7 @@ function renderHomeTrend() {
   const list = state.myPractices.filter((p) => p.date >= start && p.date <= end);
   const byKey = new Map(buckets.map((b) => [b.key, { ...b, shots: 0, hits: 0 }]));
   for (const p of list) {
-    const key = unit === "day" ? p.date : weekStartStr(p.date);
+    const key = bucketKeyForDate(p.date, unit);
     const b = byKey.get(key);
     if (!b) continue;
     const st = practiceStats(p);
@@ -1130,6 +1131,79 @@ document.querySelectorAll("[data-trange]").forEach((btn) => {
   });
 });
 
+document.querySelectorAll("[data-ttunit]").forEach((btn) => {
+  btn.addEventListener("click", () => {
+    state.teamTrendUnit = btn.dataset.ttunit;
+    document.querySelectorAll("[data-ttunit]").forEach((b) =>
+      b.classList.toggle("active", b === btn));
+    renderTeamTrend();
+  });
+});
+
+// チーム全体の推移（全体・立・射込みの3本）。期間はチーム合計の今月／通算に合わせる。
+// 週は月曜始まり、月は1日始まり。途中までの期間は、入力済みの分だけで集計する。
+function teamTrendData() {
+  const today = todayStr();
+  let start;
+  const end = today;
+  if (state.teamRange === "month") {
+    start = `${monthStr(0)}-01`;
+  } else {
+    const dates = state.teamPractices.map((p) => p.date).filter(Boolean).sort();
+    start = dates.length ? dates[0] : `${monthStr(0)}-01`;
+    if (state.teamTrendUnit === "day" && daysBetween(start, today) > 365) {
+      start = addDaysStr(today, -365);
+    }
+  }
+  const unit = state.teamTrendUnit;
+  const buckets = analysisBuckets(start, end, unit);
+  const mk = () => new Map(buckets.map((b) => [b.key, { ...b, shots: 0, hits: 0 }]));
+  const maps = { total: mk(), tachi: mk(), shakomi: mk() };
+  for (const p of state.teamPractices) {
+    if (p.date < start || p.date > end) continue;
+    const key = bucketKeyForDate(p.date, unit);
+    const st = practiceStats(p);
+    const add = (map, s, h) => {
+      const b = map.get(key);
+      if (b) { b.shots += s; b.hits += h; }
+    };
+    add(maps.total, st.shots, st.hits);
+    add(maps.tachi, st.tachi.shots, st.tachi.hits);
+    add(maps.shakomi, st.shakomi.shots, st.shakomi.hits);
+  }
+  const toSeries = (map, name, color) => {
+    const bs = [...map.values()].map((b) => ({
+      ...b,
+      rate: b.shots ? b.hits / b.shots : null
+    }));
+    const total = bs.reduce(
+      (a, b) => ({ shots: a.shots + b.shots, hits: a.hits + b.hits }),
+      { shots: 0, hits: 0 }
+    );
+    return { member: { name }, color, buckets: bs, total };
+  };
+  return {
+    buckets,
+    series: [
+      toSeries(maps.total, "全体", ANALYSIS_COLORS[0]),
+      toSeries(maps.tachi, "立", ANALYSIS_COLORS[1]),
+      toSeries(maps.shakomi, "射込み", ANALYSIS_COLORS[2])
+    ]
+  };
+}
+
+function renderTeamTrend() {
+  if (!state.team) return;
+  const { buckets, series } = teamTrendData();
+  $("team-trend-legend").innerHTML = series.map((s) =>
+    `<span class="legend-item"><span class="color-dot" style="background:${s.color}"></span>${esc(s.member.name)}（${rateText(s.total.shots, s.total.hits)}）</span>`
+  ).join("");
+  const hasData = series[0].buckets.some((b) => b.rate !== null);
+  $("team-trend").innerHTML = hasData
+    ? trendChartSvg(series, buckets)
+    : '<p class="empty">この期間の記録はまだありません。</p>';
+}
+
 function memberName(uid) {
   const m = state.members.find((x) => x.id === uid);
   return m ? m.name : "（不明）";
@@ -1150,6 +1224,7 @@ function renderTeam() {
     `${range === "month" ? "今月" : "通算"}：${st.shots}射 ${st.hits}中（的中率 ${rateText(st.shots, st.hits)}）`;
   $("team-total-breakdown").textContent =
     `立：${st.tachi.shots}射 ${st.tachi.hits}中（${rateText(st.tachi.shots, st.tachi.hits)}）／射込み：${st.shakomi.shots}射 ${st.shakomi.hits}中（${rateText(st.shakomi.shots, st.shakomi.hits)}）`;
+  renderTeamTrend();
 
   const wrap = $("team-members");
   wrap.innerHTML = "";
@@ -1406,13 +1481,37 @@ function analysisBuckets(start, end, unit) {
       buckets.push({ key: cur, label: shortDate(cur) });
       if (buckets.length > 400) break;
     }
+  } else if (unit === "month") {
+    // 月ごと（1日始まり）。その月の途中まででも、入力済みの分で集計する
+    const sameYear = start.slice(0, 4) === end.slice(0, 4);
+    const endKey = end.slice(0, 7);
+    let cur = `${start.slice(0, 7)}-01`;
+    while (cur.slice(0, 7) <= endKey) {
+      const [y, m] = cur.split("-").map(Number);
+      buckets.push({
+        key: cur.slice(0, 7),
+        label: sameYear ? `${m}月` : `${y}年${m}月`
+      });
+      cur = m === 12
+        ? `${y + 1}-01-01`
+        : `${y}-${String(m + 1).padStart(2, "0")}-01`;
+      if (buckets.length > 60) break;
+    }
   } else {
+    // 週ごと（月曜始まり）。その週の途中まででも、入力済みの分で集計する
     for (let cur = weekStartStr(start); daysBetween(cur, end) >= 0; cur = addDaysStr(cur, 7)) {
       buckets.push({ key: cur, label: `${shortDate(cur)}の週` });
       if (buckets.length > 120) break;
     }
   }
   return buckets;
+}
+
+// 日付がどの集計区間（日／週／月）に入るか
+function bucketKeyForDate(dateStr, unit) {
+  if (unit === "day") return dateStr;
+  if (unit === "month") return dateStr.slice(0, 7);
+  return weekStartStr(dateStr);
 }
 
 function buildAnalysisSeries() {
@@ -1429,7 +1528,7 @@ function buildAnalysisSeries() {
       );
       const byKey = new Map(buckets.map((b) => [b.key, { ...b, shots: 0, hits: 0 }]));
       for (const p of list) {
-        const key = unit === "day" ? p.date : weekStartStr(p.date);
+        const key = bucketKeyForDate(p.date, unit);
         const b = byKey.get(key);
         if (!b) continue;
         const st = practiceStats(p);

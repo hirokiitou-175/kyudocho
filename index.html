@@ -9,7 +9,7 @@
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="icon.svg">
-<link rel="stylesheet" href="styles.css?v=20251105-26">
+<link rel="stylesheet" href="styles.css?v=20251105-27">
 </head>
 <body>
 
@@ -223,6 +223,7 @@
           <div class="range-switch" role="group" aria-label="推移の集計単位">
             <button type="button" data-htunit="day" class="active">日ごと</button>
             <button type="button" data-htunit="week">週ごと</button>
+            <button type="button" data-htunit="month">月ごと</button>
           </div>
         </div>
         <div class="range-switch" role="group" aria-label="推移の期間" style="margin-top:0.5rem">
@@ -297,6 +298,14 @@
         </div>
         <p id="team-total" class="team-total">―</p>
         <p class="note" id="team-total-breakdown"></p>
+        <h3>チームの的中率推移</h3>
+        <div class="range-switch" role="group" aria-label="チーム推移の集計単位">
+          <button type="button" data-ttunit="day" class="active">日ごと</button>
+          <button type="button" data-ttunit="week">週ごと</button>
+          <button type="button" data-ttunit="month">月ごと</button>
+        </div>
+        <div id="team-trend-legend" class="analysis-legend"></div>
+        <div id="team-trend" class="analysis-chart"></div>
         <h3 id="team-members-heading" hidden>メンバー一覧</h3>
         <p class="note" id="team-members-help" hidden>メンバーをタップすると、詳しい記録が開きます。</p>
         <div id="team-members"></div>
@@ -361,6 +370,7 @@
             <div class="range-switch" role="group" aria-label="集計単位の切り替え">
               <button type="button" data-aunit="day" class="active">日ごと</button>
               <button type="button" data-aunit="week">週ごと</button>
+              <button type="button" data-aunit="month">月ごと</button>
             </div>
           </div>
         </div>
@@ -477,6 +487,6 @@
   </div>
 </div>
 
-<script type="module" src="app.js?v=20251105-26"></script>
+<script type="module" src="app.js?v=20251105-27"></script>
 </body>
 </html>
