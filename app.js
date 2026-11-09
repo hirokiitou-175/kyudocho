@@ -28,7 +28,7 @@ import {
   deletePractices,
   transferPractices,
   watchMyPendingWrites
-} from "./firebase.js?v=20251105-29";
+} from "./firebase.js?v=20251105-30";
 
 // ---------------- 状態 ----------------
 const state = {
@@ -398,6 +398,11 @@ async function boot() {
 }
 
 // ---------------- ログイン・新規登録 ----------------
+// 名前の表記ゆれ（空白の有無・全角半角）を吸収して比べるための正規化
+function normalizeName(s) {
+  return (s || "").normalize("NFKC").replace(/\s+/g, "").toLowerCase();
+}
+
 // ログインIDのルール：6文字以上。使える文字は自由だが、保存の仕組み上
 // どうしても使えない形（/ を含む、. や .. のみ、__ で囲まれた形）だけ除く。
 // 大文字・小文字は区別する（登録したとおりに入力してもらう）。
@@ -542,6 +547,21 @@ $("reg-form").addEventListener("submit", async (ev) => {
         role = "member";
       }
     }
+    if (!isCreate && team) {
+      // 同じ本名のメンバーが既にチームにいる場合は二重登録を防ぐ。
+      // 作ったばかりのアカウントとログインIDを取り消してから、ログインへの案内を出す。
+      const members = await listTeamMembers(team.id);
+      if (members.some((m) => normalizeName(m.name) === normalizeName(name))) {
+        state.registering = false;
+        try { await releaseLoginId(loginId); } catch (e2) { console.error(e2); }
+        try { await deleteCurrentUser(cred.user); } catch (e2) { console.error(e2); }
+        state.user = null;
+        setLoginTab("login");
+        msg.textContent = "この名前は既に登録されています。ログインタブからIDとパスワードを入力してください。";
+        msg.classList.remove("ok");
+        return;
+      }
+    }
     await saveUserProfile(cred.user.uid, {
       name,
       grade: grade || null,
@@ -684,6 +704,12 @@ $("team-join-form").addEventListener("submit", async (ev) => {
     const team = await findTeamByInviteCode(code);
     if (!team) {
       msg.textContent = "その招待コードのチームが見つかりませんでした。";
+      return;
+    }
+    // 同じ本名のメンバーが既にいる場合は参加させない（二重アカウント防止）
+    const members = await listTeamMembers(team.id);
+    if (members.some((m) => m.id !== state.user.uid && normalizeName(m.name) === normalizeName(state.profile?.name))) {
+      msg.textContent = "この名前は既にチームに登録されています。前に作ったアカウントでログインしてください。";
       return;
     }
     await saveUserProfile(state.user.uid, { teamId: team.id, role: "member" });
