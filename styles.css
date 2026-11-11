@@ -269,6 +269,36 @@ h3 { font-size: 1rem; margin: 1rem 0 0.4rem; }
 /* 矢所 */
 .yasho-pad, .yasho-view { display: flex; justify-content: center; padding: 0.4rem 0; }
 .yasho-pad svg, .yasho-view svg { width: min(70vw, 280px); height: auto; display: block; touch-action: manipulation; }
+.yasho-board { position: relative; width: min(80vw, 300px); }
+.yasho-board svg { width: 100%; height: auto; display: block; touch-action: none; }
+.yasho-layer { position: absolute; inset: 0; }
+.yasho-marker {
+  position: absolute; width: 30px; height: 30px; border-radius: 50%;
+  background: var(--accent); color: #fff; border: 2px solid #fff;
+  box-shadow: 0 1px 4px rgba(43, 43, 40, 0.35);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 0.85rem; font-weight: 700;
+  transform: translate(-50%, -50%);
+  touch-action: none; user-select: none; -webkit-user-select: none;
+  cursor: grab; z-index: 3;
+}
+.yasho-marker.in-tray { position: relative; transform: none; width: 34px; height: 34px; }
+.yasho-marker.float {
+  position: fixed; transform: translate(-50%, -50%);
+  width: 34px; height: 34px; z-index: 80; pointer-events: none;
+  box-shadow: 0 4px 10px rgba(43, 43, 40, 0.4);
+}
+.yasho-marker.drag-src { opacity: 0.35; }
+.yasho-tray {
+  display: flex; gap: 0.6rem; justify-content: center; align-items: center;
+  min-height: 42px; margin-top: 0.4rem;
+}
+.yasho-slot {
+  width: 34px; height: 34px; border-radius: 50%;
+  border: 2px dashed #b9b09a; color: #a3987f;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 0.85rem; font-weight: 700;
+}
 
 /* オーバーレイ */
 .overlay {

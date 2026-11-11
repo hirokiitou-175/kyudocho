@@ -30,7 +30,7 @@ import {
   deletePractices,
   transferPractices,
   watchMyPendingWrites
-} from "./firebase.js?v=20251105-31";
+} from "./firebase.js?v=20251105-32";
 
 // ---------------- 状態 ----------------
 const state = {
@@ -77,20 +77,34 @@ function emptyWork() {
   return { tachi: { shots: [], yashoGroups: [] }, shakomi: { shots: [], yashoGroups: [] } };
 }
 
-// 旧形式（1射ごとの yasho 配列）から、立ごとの yashoGroups へ変換する
+// 保存データから、立ごとの矢所スロットへ変換する。
+// 編集画面ではマーカー方式のため、スロットは「その立の射数ぶんの枠（点または null）」で持つ。
+// 保存形式は従来どおり、点だけを詰めた配列（editorEntries で null を除いて保存する）。
 function yashoGroupsFromEntry(e) {
-  if (Array.isArray(e.yashoGroups)) {
-    return e.yashoGroups.map((g) => (g || []).map((pt) => ({ x: pt.x, y: pt.y })));
-  }
   const size = GROUP_SIZE[e.type] || 4;
+  const shots = e.shots || [];
+  const raw = [];
+  if (Array.isArray(e.yashoGroups)) {
+    e.yashoGroups.forEach((g, gi) => {
+      raw[gi] = (g || []).filter(Boolean).map((pt) => ({ x: pt.x, y: pt.y }));
+    });
+  } else {
+    shots.forEach((_, i) => {
+      const y = e.yasho && e.yasho[i];
+      if (!y) return;
+      const g = Math.floor(i / size);
+      if (!raw[g]) raw[g] = [];
+      raw[g].push({ x: y.x, y: y.y });
+    });
+  }
   const groups = [];
-  (e.shots || []).forEach((_, i) => {
-    const y = e.yasho && e.yasho[i];
-    if (!y) return;
-    const g = Math.floor(i / size);
-    if (!groups[g]) groups[g] = [];
-    groups[g].push({ x: y.x, y: y.y });
-  });
+  const groupCount = Math.ceil(shots.length / size);
+  for (let g = 0; g < groupCount; g++) {
+    const cap = Math.max(0, Math.min(size, shots.length - g * size));
+    const slots = Array(cap).fill(null);
+    (raw[g] || []).slice(0, cap).forEach((pt, i) => { slots[i] = pt; });
+    groups.push(slots);
+  }
   return groups;
 }
 
@@ -101,15 +115,18 @@ function groupShotCount(type, group) {
   return Math.max(0, Math.min(size, total - group * size));
 }
 
-// 矢所の点が、その立の射数を超えていたら切り詰める（射を減らしたとき用）
+// 矢所スロットを、その立の射数に合わせて整える（射を減らしたとき用）
 function trimYashoGroups(type) {
   const w = editor.work[type];
   const size = GROUP_SIZE[type];
   const groupCount = Math.ceil(w.shots.length / size);
   w.yashoGroups.length = groupCount;
   for (let g = 0; g < groupCount; g++) {
-    const pts = w.yashoGroups[g] || [];
-    w.yashoGroups[g] = pts.slice(0, groupShotCount(type, g));
+    const cap = groupShotCount(type, g);
+    const cur = w.yashoGroups[g] || [];
+    const slots = Array(cap).fill(null);
+    for (let i = 0; i < cap; i++) slots[i] = cur[i] || null;
+    w.yashoGroups[g] = slots;
   }
 }
 
@@ -223,26 +240,30 @@ function targetGraphSvg(shots, hits) {
   </svg>`;
 }
 
-// 矢所の的（入力用・表示用で共用）。points: [{x,y}]（中心=0、右・下が正、-1〜1）
+// 矢所の表示範囲：中心から ±3.0（データ座標。的の半径=1.04）までを 220px で表す。
+// 的の外側を広く取って、外した矢も置きやすくする（入力・表示で共用）。
+const PAD_RANGE = 3;
+const PAD_SCALE = 110 / PAD_RANGE;
+
+// 矢所の的（入力用・表示用で共用）。points: [{x,y}]（中心=0、右・下が正、的の半径=1.04）
 function targetPadSvg(points, clickable) {
   const dots = (points || []).map((pt) => {
-    const cx = (110 + pt.x * 46).toFixed(1);
-    const cy = (110 + pt.y * 46).toFixed(1);
+    const cx = (110 + pt.x * PAD_SCALE).toFixed(1);
+    const cy = (110 + pt.y * PAD_SCALE).toFixed(1);
     return `<circle cx="${cx}" cy="${cy}" r="5" fill="#c73e2c" fill-opacity="0.75" stroke="#fff" stroke-width="1.5"/>`;
   }).join("");
   // 霞的（直径36cm）の区分どおりの同心円：中心から
   // 中白 半径3.6cm／1の黒 幅3.6／2の白 幅3.0／2の黒 幅1.5／3の白 幅3.0／外黒 幅3.3。
-  // 的から外れた矢も記録できるよう、的は引きで表示する
-  // （半径18cmを47.8pxに換算。データ座標は従来どおり的の半径=1.04）。
+  // 的から大きく外れた矢も記録できるよう、的は引きで表示する（データ座標は従来どおり）。
   return `
   <svg viewBox="0 0 220 220" ${clickable ? 'id="yasho-svg"' : ""} role="img" aria-label="的">
     <rect x="2" y="2" width="216" height="216" rx="12" fill="#f3eee1"/>
-    <circle cx="110" cy="110" r="47.8" fill="#2b2b28"/>
-    <circle cx="110" cy="110" r="39.1" fill="#fffdf7"/>
-    <circle cx="110" cy="110" r="31.1" fill="#2b2b28"/>
-    <circle cx="110" cy="110" r="27.1" fill="#fffdf7"/>
-    <circle cx="110" cy="110" r="19.1" fill="#2b2b28"/>
-    <circle cx="110" cy="110" r="9.6" fill="#fffdf7"/>
+    <circle cx="110" cy="110" r="38.1" fill="#2b2b28"/>
+    <circle cx="110" cy="110" r="31.1" fill="#fffdf7"/>
+    <circle cx="110" cy="110" r="24.8" fill="#2b2b28"/>
+    <circle cx="110" cy="110" r="21.6" fill="#fffdf7"/>
+    <circle cx="110" cy="110" r="15.3" fill="#2b2b28"/>
+    <circle cx="110" cy="110" r="7.6" fill="#fffdf7"/>
     ${dots}
   </svg>`;
 }
@@ -875,8 +896,8 @@ function yashoHeatmapSvg(points) {
   const CELL = 220 / GRID;
   const counts = new Array(GRID * GRID).fill(0);
   for (const p of points) {
-    const gx = Math.max(0, Math.min(GRID - 1, Math.floor((110 + p.x * 46) / CELL)));
-    const gy = Math.max(0, Math.min(GRID - 1, Math.floor((110 + p.y * 46) / CELL)));
+    const gx = Math.max(0, Math.min(GRID - 1, Math.floor((110 + p.x * PAD_SCALE) / CELL)));
+    const gy = Math.max(0, Math.min(GRID - 1, Math.floor((110 + p.y * PAD_SCALE) / CELL)));
     counts[gy * GRID + gx] += 1;
   }
   // 3×3でぼかして、なめらかな濃淡にする
@@ -910,17 +931,17 @@ function yashoHeatmapSvg(points) {
   }
   const mx = points.reduce((a, p) => a + p.x, 0) / points.length;
   const my = points.reduce((a, p) => a + p.y, 0) / points.length;
-  const cx = 110 + mx * 46;
-  const cy = 110 + my * 46;
+  const cx = 110 + mx * PAD_SCALE;
+  const cy = 110 + my * PAD_SCALE;
   const cross = `M ${(cx - 7).toFixed(1)} ${cy.toFixed(1)} H ${(cx + 7).toFixed(1)} M ${cx.toFixed(1)} ${(cy - 7).toFixed(1)} V ${(cy + 7).toFixed(1)}`;
-  const rings = [39.1, 31.1, 27.1, 19.1, 9.6]
+  const rings = [31.1, 24.8, 21.6, 15.3, 7.6]
     .map((r) => `<circle cx="110" cy="110" r="${r}" fill="none" stroke="#2b2b28" stroke-width="1.2"/>`)
     .join("");
   return `<svg viewBox="0 0 220 220" role="img" aria-label="矢所のヒートマップ">
-    <circle cx="110" cy="110" r="47.8" fill="#fffdf7"/>
+    <circle cx="110" cy="110" r="38.1" fill="#fffdf7"/>
     <g>${cells}</g>
     ${rings}
-    <circle cx="110" cy="110" r="47.8" fill="none" stroke="#2b2b28" stroke-width="2.5"/>
+    <circle cx="110" cy="110" r="38.1" fill="none" stroke="#2b2b28" stroke-width="2.5"/>
     <path d="${cross}" stroke="#fff" stroke-width="5" stroke-linecap="round"/>
     <path d="${cross}" stroke="#2b2b28" stroke-width="2.6" stroke-linecap="round"/>
   </svg>`;
@@ -988,7 +1009,7 @@ function restoreDraftIfAny() {
   for (const type of ["tachi", "shakomi"]) {
     if (!d.work[type]) continue;
     editor.work[type].shots = [...(d.work[type].shots || [])];
-    editor.work[type].yashoGroups = (d.work[type].yashoGroups || []).map((g) => (g || []).map((pt) => ({ x: pt.x, y: pt.y })));
+    editor.work[type].yashoGroups = (d.work[type].yashoGroups || []).map((g) => (g || []).map((pt) => (pt ? { x: pt.x, y: pt.y } : null)));
     trimYashoGroups(type);
   }
   editor.mode = d.mode === "shakomi" ? "shakomi" : "tachi";
@@ -1140,7 +1161,7 @@ function editorEntries() {
   const entries = [];
   for (const type of ["tachi", "shakomi"]) {
     const w = editor.work[type];
-    if (w.shots.length) entries.push({ type, shots: [...w.shots], yashoGroups: w.yashoGroups.map((g) => (g || []).map((pt) => ({ ...pt }))) });
+    if (w.shots.length) entries.push({ type, shots: [...w.shots], yashoGroups: w.yashoGroups.map((g) => (g || []).filter(Boolean).map((pt) => ({ ...pt }))) });
   }
   return entries;
 }
@@ -1166,7 +1187,7 @@ function renderEditor() {
       div.className = "group";
       const idx = w.shots.slice(i, i + size);
       const groupIndex = Math.floor(i / size);
-      const yashoCount = (w.yashoGroups[groupIndex] || []).length;
+      const yashoCount = (w.yashoGroups[groupIndex] || []).filter(Boolean).length;
       div.innerHTML = `<div class="g-title">${TYPE_LABEL[type]} ${groupIndex + 1}${idx.length < size ? "（途中）" : ""}</div>`;
       const row = document.createElement("div");
       row.className = "group-row";
@@ -1346,30 +1367,75 @@ function renderYashoPad() {
   if (!yashoTarget) return;
   const { type, group } = yashoTarget;
   const w = editor.work[type];
-  if (!w.yashoGroups[group]) w.yashoGroups[group] = [];
-  const points = w.yashoGroups[group];
   const cap = groupShotCount(type, group);
+  if (!w.yashoGroups[group]) w.yashoGroups[group] = [];
+  const slots = w.yashoGroups[group];
+  while (slots.length < cap) slots.push(null);
+  slots.length = cap;
+  const placed = slots.filter(Boolean).length;
   $("yasho-target-label").textContent =
-    `${groupLabel(type, group)} の矢所：的をタップして ${cap} 本分まとめて入れてください。○×や何本目かの区別は不要です（いま ${points.length}／${cap} 点）。`;
-  $("yasho-pad").innerHTML = targetPadSvg(points, true);
-  const svg = $("yasho-svg");
-  if (svg) {
-    svg.addEventListener("click", (ev) => {
-      if (points.length >= cap) return;
-      const rect = svg.getBoundingClientRect();
-      // 画面上のタップ位置 → 的の中心からの相対座標（右・下が正、的の半径=1.04）
-      const px = (ev.clientX - rect.left) / rect.width;   // 0〜1
-      const py = (ev.clientY - rect.top) / rect.height;   // 0〜1
-      // 的は引き表示（半径=46px換算）。的の外も ±2.3 まで記録できる
-      let x = (px * 220 - 110) / 46;
-      let y = (py * 220 - 110) / 46;
-      x = Math.max(-2.3, Math.min(2.3, Math.round(x * 100) / 100));
-      y = Math.max(-2.3, Math.min(2.3, Math.round(y * 100) / 100));
-      points.push({ x, y });
-      renderYashoPad();
-      renderEditor();
-    });
-  }
+    `${groupLabel(type, group)} の矢所：下のマーカーをドラッグして的に置いてください。置いたマーカーはドラッグで動かせます。的の外に出すと下に戻ります（いま ${placed}／${cap} 点）。`;
+  const markers = slots.map((pt, i) => {
+    if (!pt) return "";
+    const left = ((pt.x / (PAD_RANGE * 2)) + 0.5) * 100;
+    const top = ((pt.y / (PAD_RANGE * 2)) + 0.5) * 100;
+    return `<div class="yasho-marker" data-slot="${i}" style="left:${left.toFixed(1)}%;top:${top.toFixed(1)}%">${i + 1}</div>`;
+  }).join("");
+  $("yasho-pad").innerHTML =
+    `<div class="yasho-board" id="yasho-board">${targetPadSvg([], false)}<div class="yasho-layer">${markers}</div></div>`;
+  $("yasho-tray").innerHTML = slots.map((pt, i) => pt
+    ? `<div class="yasho-slot">${i + 1}</div>`
+    : `<div class="yasho-marker in-tray" data-slot="${i}">${i + 1}</div>`).join("");
+  document.querySelectorAll("#yasho-panel .yasho-marker").forEach((el) => {
+    el.addEventListener("pointerdown", (ev) => onMarkerPointerDown(ev, Number(el.dataset.slot)));
+  });
+}
+
+// マーカーのドラッグ：指に追随する仮マーカーを出し、的の上で離したらその位置に記録する。
+// 的の外で離したら、そのマーカーは下の置き場に戻る。
+function onMarkerPointerDown(ev, slot) {
+  ev.preventDefault();
+  const el = ev.currentTarget;
+  el.classList.add("drag-src");
+  const floatEl = document.createElement("div");
+  floatEl.className = "yasho-marker float";
+  floatEl.textContent = String(slot + 1);
+  document.body.appendChild(floatEl);
+  const moveFloat = (x, y) => {
+    floatEl.style.left = `${x}px`;
+    floatEl.style.top = `${y}px`;
+  };
+  moveFloat(ev.clientX, ev.clientY);
+  try { el.setPointerCapture(ev.pointerId); } catch (e) { /* 取れなくても続ける */ }
+  const onMove = (e2) => moveFloat(e2.clientX, e2.clientY);
+  const cleanup = () => {
+    el.removeEventListener("pointermove", onMove);
+    floatEl.remove();
+  };
+  el.addEventListener("pointermove", onMove);
+  el.addEventListener("pointerup", (e2) => {
+    cleanup();
+    if (!yashoTarget) return;
+    const { type, group } = yashoTarget;
+    const slots = editor.work[type].yashoGroups[group] || [];
+    const board = $("yasho-board");
+    if (!board || !slots.length) return;
+    const rect = board.getBoundingClientRect();
+    const inside = e2.clientX >= rect.left && e2.clientX <= rect.right
+      && e2.clientY >= rect.top && e2.clientY <= rect.bottom;
+    if (inside) {
+      let x = ((e2.clientX - rect.left) / rect.width * 2 - 1) * PAD_RANGE;
+      let y = ((e2.clientY - rect.top) / rect.height * 2 - 1) * PAD_RANGE;
+      x = Math.max(-PAD_RANGE, Math.min(PAD_RANGE, Math.round(x * 100) / 100));
+      y = Math.max(-PAD_RANGE, Math.min(PAD_RANGE, Math.round(y * 100) / 100));
+      slots[slot] = { x, y };
+    } else {
+      slots[slot] = null;
+    }
+    renderYashoPad();
+    renderEditor();
+  }, { once: true });
+  el.addEventListener("pointercancel", cleanup, { once: true });
 }
 
 function closeYashoPanel() {
@@ -1379,14 +1445,17 @@ function closeYashoPanel() {
 $("btn-yasho-done").addEventListener("click", closeYashoPanel);
 $("btn-yasho-pop").addEventListener("click", () => {
   if (!yashoTarget) return;
-  const pts = editor.work[yashoTarget.type].yashoGroups[yashoTarget.group] || [];
-  pts.pop();
+  const slots = editor.work[yashoTarget.type].yashoGroups[yashoTarget.group] || [];
+  for (let i = slots.length - 1; i >= 0; i--) {
+    if (slots[i]) { slots[i] = null; break; }
+  }
   renderYashoPad();
   renderEditor();
 });
 $("btn-yasho-clear").addEventListener("click", () => {
   if (!yashoTarget) return;
-  editor.work[yashoTarget.type].yashoGroups[yashoTarget.group] = [];
+  const slots = editor.work[yashoTarget.type].yashoGroups[yashoTarget.group] || [];
+  slots.fill(null);
   renderYashoPad();
   renderEditor();
 });
@@ -1911,13 +1980,13 @@ function analysisYashoSvg(series) {
   const centers = [];
   for (const s of series) {
     for (const pt of s.points) {
-      dots.push(`<circle cx="${(110 + pt.x * 46).toFixed(1)}" cy="${(110 + pt.y * 46).toFixed(1)}" r="4.2" fill="${s.color}" fill-opacity="0.65" stroke="#fff" stroke-width="1"/>`);
+      dots.push(`<circle cx="${(110 + pt.x * PAD_SCALE).toFixed(1)}" cy="${(110 + pt.y * PAD_SCALE).toFixed(1)}" r="4.2" fill="${s.color}" fill-opacity="0.65" stroke="#fff" stroke-width="1"/>`);
     }
     if (s.points.length) {
       const mx = s.points.reduce((a, p) => a + p.x, 0) / s.points.length;
       const my = s.points.reduce((a, p) => a + p.y, 0) / s.points.length;
-      const cx = 110 + mx * 46;
-      const cy = 110 + my * 46;
+      const cx = 110 + mx * PAD_SCALE;
+      const cy = 110 + my * PAD_SCALE;
       const cross = `M ${(cx - 7).toFixed(1)} ${cy.toFixed(1)} H ${(cx + 7).toFixed(1)} M ${cx.toFixed(1)} ${(cy - 7).toFixed(1)} V ${(cy + 7).toFixed(1)}`;
       centers.push(
         `<path d="${cross}" stroke="#fff" stroke-width="5" stroke-linecap="round"/>` +
@@ -1926,12 +1995,12 @@ function analysisYashoSvg(series) {
     }
   }
   return `<svg viewBox="0 0 220 220" role="img" aria-label="矢所の集中">
-    <circle cx="110" cy="110" r="47.8" fill="#2b2b28"/>
-    <circle cx="110" cy="110" r="39.1" fill="#fffdf7"/>
-    <circle cx="110" cy="110" r="31.1" fill="#2b2b28"/>
-    <circle cx="110" cy="110" r="27.1" fill="#fffdf7"/>
-    <circle cx="110" cy="110" r="19.1" fill="#2b2b28"/>
-    <circle cx="110" cy="110" r="9.6" fill="#fffdf7"/>
+    <circle cx="110" cy="110" r="38.1" fill="#2b2b28"/>
+    <circle cx="110" cy="110" r="31.1" fill="#fffdf7"/>
+    <circle cx="110" cy="110" r="24.8" fill="#2b2b28"/>
+    <circle cx="110" cy="110" r="21.6" fill="#fffdf7"/>
+    <circle cx="110" cy="110" r="15.3" fill="#2b2b28"/>
+    <circle cx="110" cy="110" r="7.6" fill="#fffdf7"/>
     ${dots.join("")}${centers.join("")}
   </svg>`;
 }
