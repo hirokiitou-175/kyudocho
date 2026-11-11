@@ -25,10 +25,12 @@ import {
   listPracticesByTeam,
   savePractice,
   removePractice,
+  fetchPracticeFromServer,
+  resendPractice,
   deletePractices,
   transferPractices,
   watchMyPendingWrites
-} from "./firebase.js?v=20251105-30";
+} from "./firebase.js?v=20251105-31";
 
 // ---------------- 状態 ----------------
 const state = {
@@ -52,7 +54,8 @@ const state = {
   analysisUnit: "day", // 分析シートの集計単位 day | week
   analysisSelected: [], // 分析シートで比べるメンバーの uid
   analysisInit: false, // 分析シートの初期選択が済んだか
-  registering: false   // 新規登録の処理中は watchAuth の画面遷移を止める
+  registering: false,  // 新規登録の処理中は watchAuth の画面遷移を止める
+  pendingWrites: false // サーバー未到着の自分の書き込みがあるか（監視から更新）
 };
 
 // 記録編集中の内容（1日分）
@@ -288,6 +291,9 @@ async function route() {
   startPendingWatch();
   await refreshData();
   renderHome();
+  // 入力途中の控えがあれば復元し、送信箱に残っていればサーバーと照合する
+  restoreDraftIfAny();
+  flushOutbox();
   // 記録タブの日付欄が未設定なら、今日の記録（あれば）を読み込んでおく
   if (!$("record-date").value) {
     const todayPractice = state.myPractices.find((p) => p.date === todayStr());
@@ -320,6 +326,8 @@ document.addEventListener("visibilitychange", async () => {
     lastHiddenAt = Date.now();
     return;
   }
+  // 画面に戻ってきたら、送信箱の照合は間隔をあけずに行う
+  if (state.user && state.profile?.teamId && !state.registering) flushOutbox();
   if (!lastHiddenAt || Date.now() - lastHiddenAt < 60 * 1000) return;
   lastHiddenAt = 0;
   if (!state.user || !state.profile?.teamId || state.registering) return;
@@ -368,13 +376,16 @@ function startPendingWatch() {
   stopPendingWatch();
   pendingUid = state.user.uid;
   pendingUnsub = watchMyPendingWrites(state.user.uid, (pending) => {
-    $("sync-note").hidden = !pending;
+    state.pendingWrites = pending;
+    updateSyncNote();
+    if (!pending) flushOutbox();
   });
 }
 function stopPendingWatch() {
   if (pendingUnsub) pendingUnsub();
   pendingUnsub = null;
   pendingUid = null;
+  state.pendingWrites = false;
   const el = $("sync-note");
   if (el) el.hidden = true;
 }
@@ -724,6 +735,10 @@ $("team-join-form").addEventListener("submit", async (ev) => {
 
 // ---------------- ログアウト ----------------
 async function doLogout() {
+  // 送信できていない記録が残っているままログアウトすると、届かないままになることがある
+  if (state.pendingWrites || outboxRead().length) {
+    if (!window.confirm("まだ送信できていない記録があります。ログアウトすると、その記録が届かないままになることがあります。それでもログアウトしますか？")) return;
+  }
   try { await logout(); } catch (e) { console.error(e); }
 }
 $("setup-logout").addEventListener("click", doLogout);
@@ -911,6 +926,164 @@ function yashoHeatmapSvg(points) {
   </svg>`;
 }
 
+// ---------------- 端末内の控え（下書き・送信箱） ----------------
+// 道場の電波問題への追加対策（v31）：
+// ・入力途中の内容は、その都度この端末に自動で控える。アプリが閉じても、次に開いたときに復元する。
+// ・保存した記録は、サーバー到着を確認できるまで「送信箱」にも控える。
+//   万一アプリ側の送信待ちが消えてしまっても、次に開いたときにサーバーと照合して送り直す。
+// どちらもログインIDごとに分け、端末の保存が使えない環境では何もしない（通常動作に戻る）。
+function storageGet(key) {
+  try { return window.localStorage.getItem(key); } catch (e) { return null; }
+}
+function storageSet(key, value) {
+  try { window.localStorage.setItem(key, value); } catch (e) { /* 控えられない環境では諦める */ }
+}
+function storageRemove(key) {
+  try { window.localStorage.removeItem(key); } catch (e) { /* 同上 */ }
+}
+function draftKey() {
+  return state.user ? `kyudocho-draft-v1:${state.user.uid}` : null;
+}
+function outboxKey() {
+  return state.user ? `kyudocho-outbox-v1:${state.user.uid}` : null;
+}
+
+// 入力途中の内容を控える。内容が空なら控えを消す。
+function saveDraft() {
+  const key = draftKey();
+  if (!key) return;
+  const memo = $("record-memo") ? $("record-memo").value : editor.memo;
+  const hasShots = editor.work.tachi.shots.length || editor.work.shakomi.shots.length;
+  if (!hasShots && !(memo || "").trim()) {
+    storageRemove(key);
+    return;
+  }
+  storageSet(key, JSON.stringify({
+    practiceId: editor.practiceId,
+    date: editor.date,
+    mode: editor.mode,
+    memo: memo || "",
+    work: editor.work
+  }));
+}
+function clearDraft() {
+  const key = draftKey();
+  if (key) storageRemove(key);
+}
+// 控えてあった入力途中の内容があれば、エディタに戻す。
+function restoreDraftIfAny() {
+  const key = draftKey();
+  if (!key) return;
+  const raw = storageGet(key);
+  if (!raw) return;
+  let d = null;
+  try { d = JSON.parse(raw); } catch (e) { return; }
+  if (!d || !d.work) return;
+  const hasShots = (d.work.tachi?.shots || []).length || (d.work.shakomi?.shots || []).length;
+  if (!hasShots && !(d.memo || "").trim()) return;
+  editor.practiceId = d.practiceId || null;
+  editor.date = d.date || todayStr();
+  editor.memo = d.memo || "";
+  editor.work = emptyWork();
+  for (const type of ["tachi", "shakomi"]) {
+    if (!d.work[type]) continue;
+    editor.work[type].shots = [...(d.work[type].shots || [])];
+    editor.work[type].yashoGroups = (d.work[type].yashoGroups || []).map((g) => (g || []).map((pt) => ({ x: pt.x, y: pt.y })));
+    trimYashoGroups(type);
+  }
+  editor.mode = d.mode === "shakomi" ? "shakomi" : "tachi";
+  $("record-date").value = editor.date;
+  $("record-memo").value = editor.memo;
+  $("mode-tachi").classList.toggle("active", editor.mode === "tachi");
+  $("mode-shakomi").classList.toggle("active", editor.mode === "shakomi");
+  $("record-message").textContent = "入力途中の内容を復元しました。そのまま続きを入力できます。";
+}
+
+// 送信箱：サーバー到着が確認できていない保存・削除の控え
+function outboxRead() {
+  const key = outboxKey();
+  if (!key) return [];
+  try {
+    const arr = JSON.parse(storageGet(key) || "[]");
+    return Array.isArray(arr) ? arr : [];
+  } catch (e) {
+    return [];
+  }
+}
+function outboxWrite(items) {
+  const key = outboxKey();
+  if (!key) return;
+  if (items.length) storageSet(key, JSON.stringify(items));
+  else storageRemove(key);
+}
+function outboxAdd(item) {
+  const items = outboxRead().filter((i) => i.id !== item.id);
+  items.push(item);
+  outboxWrite(items);
+  updateSyncNote();
+}
+function outboxRemove(id) {
+  outboxWrite(outboxRead().filter((i) => i.id !== id));
+  updateSyncNote();
+}
+
+// 送信待ちの案内（件数が分かる場合は件数も出す）
+function updateSyncNote() {
+  const el = $("sync-note");
+  if (!el) return;
+  const n = outboxRead().length;
+  el.hidden = !(state.pendingWrites || n > 0);
+  el.textContent = n > 0
+    ? `送信待ちの記録が ${n} 件あります。通信がつながると自動で送られます。`
+    : "送信待ちの記録があります。通信がつながると自動で送られます。";
+}
+
+// サーバー側の記録と、送信箱の控えが同じ内容か
+function samePracticeData(serverDoc, data) {
+  if (!serverDoc || !data) return false;
+  return serverDoc.date === data.date
+    && (serverDoc.memo || "") === (data.memo || "")
+    && !!serverDoc.incomplete === !!data.incomplete
+    && JSON.stringify(serverDoc.entries || []) === JSON.stringify(data.entries || []);
+}
+
+// 送信箱の控えをサーバーと照合し、届いていないものは送り直す。
+// サーバーに確認できない（通信が届かない）ときは、その件は残して次回に回す。
+let outboxFlushing = false;
+async function flushOutbox() {
+  if (outboxFlushing || !state.user) return;
+  if (!outboxRead().length) { updateSyncNote(); return; }
+  outboxFlushing = true;
+  try {
+    for (const item of outboxRead()) {
+      let serverDoc;
+      try {
+        serverDoc = await fetchPracticeFromServer(item.id);
+      } catch (e) {
+        continue;
+      }
+      if (item.deleted) {
+        if (!serverDoc) { outboxRemove(item.id); continue; }
+        const r = await removePractice(item.id);
+        if (r === "ok") outboxRemove(item.id);
+        continue;
+      }
+      const serverMillis = serverDoc?.updatedAt?.toMillis ? serverDoc.updatedAt.toMillis() : 0;
+      if (serverDoc && (serverMillis > (item.queuedAt || 0) || samePracticeData(serverDoc, item.data))) {
+        outboxRemove(item.id);
+        continue;
+      }
+      const resent = resendPractice(item.id, item.data);
+      const r = await resent.settled;
+      if (r === "ok") outboxRemove(item.id);
+    }
+  } catch (e) {
+    console.error(e);
+  }
+  outboxFlushing = false;
+  updateSyncNote();
+}
+
 // ---------------- 記録エディタ ----------------
 function resetEditor(dateStr) {
   editor.practiceId = null;
@@ -948,6 +1121,10 @@ $("record-date").addEventListener("change", () => {
   else resetEditor(d);
 });
 $("btn-new-record").addEventListener("click", () => resetEditor(todayStr()));
+$("record-memo").addEventListener("input", () => {
+  editor.memo = $("record-memo").value;
+  saveDraft();
+});
 
 $("mode-tachi").addEventListener("click", () => setMode("tachi"));
 $("mode-shakomi").addEventListener("click", () => setMode("shakomi"));
@@ -1029,6 +1206,7 @@ function renderEditor() {
     `合計 ${st.shots}射 ${st.hits}中（${rateText(st.shots, st.hits)}）` +
     (editorIncomplete() ? " ／ 最後が途中です（このまま保存でき、未完了として記録されます）" : "");
   $("btn-delete").hidden = !editor.practiceId;
+  saveDraft();
 }
 
 function addShot(hit) {
@@ -1082,16 +1260,22 @@ $("btn-save").addEventListener("click", async () => {
   // サーバー到着の確認は裏側で続け、届いていなければ案内を出す。
   const saved = savePractice(editor.practiceId, data);
   editor.practiceId = saved.id;
+  // サーバー到着を確認できるまで、端末の送信箱にも控えておく（二重の保険）
+  outboxAdd({ id: saved.id, data, deleted: false, queuedAt: Date.now() });
+  clearDraft();
   upsertLocalPractice({ id: saved.id, ...data });
   renderHome();
   showSummary(data);
   msg.textContent = "";
   saved.settled.then((result) => {
-    if (result === "queued") {
+    if (result === "ok") {
+      outboxRemove(saved.id);
+    } else if (result === "queued") {
       msg.textContent = "端末に保存しました。通信がつながると自動で送られます。";
     }
   }).catch((e) => {
     console.error(e);
+    outboxRemove(saved.id);
     removeLocalPractice(saved.id);
     renderHome();
     $("summary-panel").hidden = true;
@@ -1102,12 +1286,16 @@ $("btn-save").addEventListener("click", async () => {
 $("btn-delete").addEventListener("click", async () => {
   if (!editor.practiceId) return;
   if (!window.confirm("この日の記録を削除します。よろしいですか？")) return;
-  const settled = removePractice(editor.practiceId);
-  removeLocalPractice(editor.practiceId);
+  const deletingId = editor.practiceId;
+  // 送信箱にこの記録の「保存」が残っていたら取り消す（消した記録が送り直されないように）
+  outboxRemove(deletingId);
+  const settled = removePractice(deletingId);
+  removeLocalPractice(deletingId);
   resetEditor(editor.date);
   renderHome();
   settled.then((result) => {
     if (result === "queued") {
+      outboxAdd({ id: deletingId, data: null, deleted: true, queuedAt: Date.now() });
       $("record-message").textContent = "端末で削除しました。通信がつながると反映されます。";
     }
   }).catch((e) => {

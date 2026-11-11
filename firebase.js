@@ -21,6 +21,7 @@ import {
   persistentLocalCache,
   doc,
   getDoc,
+  getDocFromServer,
   setDoc,
   addDoc,
   updateDoc,
@@ -33,7 +34,7 @@ import {
   onSnapshot,
   serverTimestamp
 } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js";
-import { firebaseConfig } from "./firebase-config.js?v=20251105-30";
+import { firebaseConfig } from "./firebase-config.js?v=20251105-31";
 
 const app = initializeApp(firebaseConfig);
 export const auth = getAuth(app);
@@ -312,6 +313,26 @@ export async function deletePractices(ids) {
 
 export function removePractice(practiceId) {
   return settleWrite(deleteDoc(doc(db, "practices", practiceId)));
+}
+
+// サーバー上の記録を、端末内の控えではなく直接確認する（送信箱の照合用）。
+// 通信できないときは例外になるので、呼び出し側で「確認できなかった」として扱う。
+export async function fetchPracticeFromServer(practiceId) {
+  const snap = await getDocFromServer(doc(db, "practices", practiceId));
+  return snap.exists() ? { id: snap.id, ...snap.data() } : null;
+}
+
+// 送信箱に残っていた記録を、同じIDで送り直す（届いていなければ新規、届いていれば上書き。
+// IDが同じなので二重にはならない）。settleWrite で包んで { settled } 形式に合わせる。
+export function resendPractice(practiceId, data) {
+  const expireAt = data && data.date ? expireAtFor(data.date) : null;
+  const extra = expireAt ? { expireAt } : {};
+  const settled = settleWrite(setDoc(doc(db, "practices", practiceId), {
+    ...data,
+    ...extra,
+    updatedAt: serverTimestamp()
+  }, { merge: true }));
+  return { id: practiceId, settled };
 }
 
 // 自分の記録に「サーバー未到着の書き込み」があるかを監視する。
