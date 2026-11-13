@@ -30,7 +30,7 @@ import {
   deletePractices,
   transferPractices,
   watchMyPendingWrites
-} from "./firebase.js?v=20251105-32";
+} from "./firebase.js?v=20251105-33";
 
 // ---------------- 状態 ----------------
 const state = {

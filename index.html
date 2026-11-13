@@ -9,7 +9,7 @@
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="icon.svg">
-<link rel="stylesheet" href="styles.css?v=20251105-32">
+<link rel="stylesheet" href="styles.css?v=20251105-33">
 </head>
 <body>
 
@@ -489,6 +489,22 @@
   </div>
 </div>
 
-<script type="module" src="app.js?v=20251105-32"></script>
+<script type="module" src="app.js?v=20251105-33"></script>
+<script>
+  // オフラインでも開けるように、アプリ本体を端末に控える仕組み（sw.js）を登録する。
+  // 新しい版に切り替わったときは、開き直して最新にする（最初の登録時は開き直さない）。
+  if ("serviceWorker" in navigator) {
+    var hadController = !!navigator.serviceWorker.controller;
+    var swReloaded = false;
+    navigator.serviceWorker.addEventListener("controllerchange", function () {
+      if (!hadController || swReloaded) return;
+      swReloaded = true;
+      window.location.reload();
+    });
+    window.addEventListener("load", function () {
+      navigator.serviceWorker.register("./sw.js").catch(function (e) { console.error(e); });
+    });
+  }
+</script>
 </body>
 </html>
